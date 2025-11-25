@@ -322,25 +322,110 @@ MODELS = {
     }
 }
 
-# Default coaching themes
+# Default coaching themes with 5C framework mapping
 DEFAULT_THEMES = [
+    # Connection (Building Rapport)
     "Active Listening & Acknowledgment",
     "Empathy & Emotional Intelligence",
-    "Clear Communication & Articulation",
+    "Building Rapport & Trust",
     "Professional Tone & Language",
+    "Personalization & Context Awareness",
+    "Emotional Regulation",
+    
+    # Clarity (Clear Communication)
+    "Clear Communication & Articulation",
+    "Process Adherence & Documentation",
+    "Product Knowledge & Accuracy",
+    "Jargon-Free Communication",
+    "Step-by-Step Guidance",
+    "Confirmation & Recap Skills",
+    
+    # Commitment (Ownership & Follow-through)
     "First Call Resolution",
-    "Problem Diagnosis",
-    "Solution Offering",
-    "Response Time Management",
-    "Process Adherence",
-    "Escalation Judgment",
-    "Proactive Communication",
-    "Managing Expectations",
+    "Solution Offering & Alternatives",
+    "Follow-up & Closure Quality",
+    "Ownership Language Usage",
+    "Timeline Setting & Commitments",
+    "Accountability & Promises",
+    
+    # Challenge (Problem-solving)
+    "Problem Diagnosis & Root Cause",
     "Handling Difficult Customers",
-    "Building Rapport",
-    "Product Knowledge",
-    "Confidence in Responses"
+    "Escalation Judgment & Timing",
+    "De-escalation Techniques",
+    "Objection Handling",
+    "Critical Thinking & Analysis",
+    
+    # Change (Adaptability & Growth)
+    "Response Time Management",
+    "Proactive Communication",
+    "Managing Customer Expectations",
+    "Adaptability & Flexibility",
+    "Feedback Responsiveness",
+    "Continuous Improvement Mindset"
 ]
+
+# 5C Framework mapping
+THEME_TO_5C = {
+    "Connection": [
+        "Active Listening & Acknowledgment",
+        "Empathy & Emotional Intelligence",
+        "Building Rapport & Trust",
+        "Professional Tone & Language",
+        "Personalization & Context Awareness",
+        "Emotional Regulation"
+    ],
+    "Clarity": [
+        "Clear Communication & Articulation",
+        "Process Adherence & Documentation",
+        "Product Knowledge & Accuracy",
+        "Jargon-Free Communication",
+        "Step-by-Step Guidance",
+        "Confirmation & Recap Skills"
+    ],
+    "Commitment": [
+        "First Call Resolution",
+        "Solution Offering & Alternatives",
+        "Follow-up & Closure Quality",
+        "Ownership Language Usage",
+        "Timeline Setting & Commitments",
+        "Accountability & Promises"
+    ],
+    "Challenge": [
+        "Problem Diagnosis & Root Cause",
+        "Handling Difficult Customers",
+        "Escalation Judgment & Timing",
+        "De-escalation Techniques",
+        "Objection Handling",
+        "Critical Thinking & Analysis"
+    ],
+    "Change": [
+        "Response Time Management",
+        "Proactive Communication",
+        "Managing Customer Expectations",
+        "Adaptability & Flexibility",
+        "Feedback Responsiveness",
+        "Continuous Improvement Mindset"
+    ]
+}
+
+# 5C Icons
+FIVE_C_ICONS = {
+    "Connection": "🤝",
+    "Clarity": "💬",
+    "Commitment": "✅",
+    "Challenge": "💪",
+    "Change": "🔄"
+}
+
+# 5C Colors
+FIVE_C_COLORS = {
+    "Connection": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    "Clarity": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    "Commitment": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    "Challenge": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "Change": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
+}
 
 class RateLimiter:
     """Token bucket rate limiter for API calls"""
@@ -1085,6 +1170,110 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 </div>
             </div>
             
+            <h2 class="section-title">📊 5C Coaching Framework Analysis</h2>
+            <div style="margin: 30px 0; padding: 30px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 20px;">
+                <p style="font-size: 1.1rem; color: #666; text-align: center; margin-bottom: 40px;">
+                    Coaching themes mapped to the 5 fundamental pillars of customer service excellence
+                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px;">
+    """
+    
+    # Calculate 5C scores per agent
+    agent_5c_scores = {}
+    for agent_name, agent_data in insights.items():
+        themes = agent_data.get('coaching_themes', [])
+        c_scores = {c: 0 for c in FIVE_C_ICONS.keys()}
+        
+        for theme in themes:
+            theme_name = theme.get('theme', '')
+            # Find which C this theme belongs to
+            for c, theme_list in THEME_TO_5C.items():
+                if any(t in theme_name for t in theme_list):
+                    priority = theme.get('priority', 'low')
+                    # Weight by priority
+                    weight = 3 if priority == 'high' else 2 if priority == 'medium' else 1
+                    c_scores[c] += weight
+                    break
+        
+        agent_5c_scores[agent_name] = c_scores
+    
+    # Generate 5C cards
+    for c_name, icon in FIVE_C_ICONS.items():
+        color = FIVE_C_COLORS[c_name]
+        
+        # Get top 5 agents needing help in this C (highest scores = most issues)
+        agent_scores = [(agent, scores[c_name]) for agent, scores in agent_5c_scores.items()]
+        top_agents = sorted(agent_scores, key=lambda x: x[1], reverse=True)[:5]
+        top_agents = [a for a in top_agents if a[1] > 0]  # Only agents with issues
+        
+        max_score = max([score for _, score in top_agents]) if top_agents else 1
+        
+        html += f"""
+                    <div style="background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); transition: all 0.3s ease;">
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
+                            <div style="font-size: 3rem;">{icon}</div>
+                            <div>
+                                <h3 style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
+                                <p style="font-size: 0.9rem; color: #666; margin: 5px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
+                            </div>
+                        </div>
+        """
+        
+        if top_agents:
+            html += """
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+            """
+            
+            for idx, (agent, score) in enumerate(top_agents, 1):
+                percentage = (score / max_score) * 100
+                
+                # Get specific themes for this agent in this C
+                agent_themes = insights[agent].get('coaching_themes', [])
+                relevant_themes = []
+                for theme in agent_themes:
+                    theme_name = theme.get('theme', '')
+                    if any(t in theme_name for t in THEME_TO_5C[c_name]):
+                        relevant_themes.append(theme_name)
+                
+                themes_text = ', '.join(relevant_themes[:2])
+                if len(relevant_themes) > 2:
+                    themes_text += f" +{len(relevant_themes) - 2} more"
+                
+                html += f"""
+                            <div style="background: #f8f9fa; padding: 15px; border-radius: 12px;">
+                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span style="font-weight: 700; color: #333; font-size: 1.1rem;">{idx}.</span>
+                                        <span style="font-weight: 600; color: #333;">{agent}</span>
+                                    </div>
+                                    <span style="font-size: 0.85rem; color: #666; font-weight: 600;">Score: {score}</span>
+                                </div>
+                                <div style="background: #e0e0e0; height: 8px; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
+                                    <div style="background: {color}; height: 100%; width: {percentage}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                                </div>
+                                <div style="font-size: 0.8rem; color: #666; font-style: italic;">{themes_text}</div>
+                            </div>
+                """
+            
+            html += """
+                        </div>
+            """
+        else:
+            html += """
+                        <div style="text-align: center; padding: 30px; color: #999;">
+                            <p style="font-size: 1.1rem;">✨ Great job!</p>
+                            <p style="font-size: 0.9rem;">No major issues in this area</p>
+                        </div>
+            """
+        
+        html += """
+                    </div>
+        """
+    
+    html += """
+                </div>
+            </div>
+            
             <h2 class="section-title">📊 Coaching Theme Distribution</h2>
             <div class="chart-container">
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 20px;">
@@ -1376,31 +1565,96 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
         para.font.size = Pt(28)
         para.space_before = Pt(20)
     
-    # Agent slides
-    for agent_name, agent_data in list(insights.items())[:10]:  # Limit to 10 agents
+    # 5C Framework Overview Slide
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    title = slide.shapes.title
+    title.text = "🎯 5C Coaching Framework"
+    
+    # Calculate 5C scores per agent
+    agent_5c_scores = {}
+    for agent_name, agent_data in insights.items():
+        themes = agent_data.get('coaching_themes', [])
+        c_scores = {c: 0 for c in FIVE_C_ICONS.keys()}
+        
+        for theme in themes:
+            theme_name = theme.get('theme', '')
+            for c, theme_list in THEME_TO_5C.items():
+                if any(t in theme_name for t in theme_list):
+                    priority = theme.get('priority', 'low')
+                    weight = 3 if priority == 'high' else 2 if priority == 'medium' else 1
+                    c_scores[c] += weight
+                    break
+        
+        agent_5c_scores[agent_name] = c_scores
+    
+    # Add 5C summary
+    y_pos = 2
+    for c_name, icon in FIVE_C_ICONS.items():
+        agent_scores = [(agent, scores[c_name]) for agent, scores in agent_5c_scores.items()]
+        top_agents = sorted(agent_scores, key=lambda x: x[1], reverse=True)[:3]
+        agents_needing_help = len([a for a, s in agent_scores if s > 0])
+        
+        text_box = slide.shapes.add_textbox(Inches(1.5), Inches(y_pos), Inches(7), Inches(0.8))
+        text_frame = text_box.text_frame
+        text_frame.text = f"{icon} {c_name}: {agents_needing_help} agents need support"
+        para = text_frame.paragraphs[0]
+        para.font.size = Pt(20)
+        para.font.bold = True
+        
+        y_pos += 0.9
+    
+    # Agent slides (limit to 10)
+    for agent_name, agent_data in list(insights.items())[:10]:
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         title = slide.shapes.title
         title.text = f"👤 {agent_name}"
         
-        themes = agent_data.get('coaching_themes', [])[:3]  # Top 3
+        # Agent's 5C scores
+        agent_scores = agent_5c_scores.get(agent_name, {})
+        
+        # Add 5C breakdown
+        y_pos = 2
+        text_box = slide.shapes.add_textbox(Inches(1), Inches(y_pos), Inches(4), Inches(0.5))
+        text_frame = text_box.text_frame
+        text_frame.text = "5C Framework Scores:"
+        text_frame.paragraphs[0].font.size = Pt(18)
+        text_frame.paragraphs[0].font.bold = True
+        
+        y_pos += 0.6
+        for c_name, score in agent_scores.items():
+            if score > 0:
+                icon = FIVE_C_ICONS[c_name]
+                text_box = slide.shapes.add_textbox(Inches(1.2), Inches(y_pos), Inches(3.5), Inches(0.4))
+                text_frame = text_box.text_frame
+                text_frame.text = f"{icon} {c_name}: {score} issues"
+                text_frame.paragraphs[0].font.size = Pt(16)
+                y_pos += 0.5
+        
+        # Top themes
+        themes = agent_data.get('coaching_themes', [])[:3]
         
         y_pos = 2
+        theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(0.5))
+        theme_frame = theme_box.text_frame
+        theme_frame.text = "Top Coaching Needs:"
+        theme_frame.paragraphs[0].font.size = Pt(18)
+        theme_frame.paragraphs[0].font.bold = True
+        
+        y_pos += 0.6
         for idx, theme in enumerate(themes, 1):
-            # Theme box
-            theme_box = slide.shapes.add_textbox(Inches(1), Inches(y_pos), Inches(8), Inches(1.2))
+            theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(1))
             theme_frame = theme_box.text_frame
             
-            # Theme name
             theme_frame.text = f"{idx}. {theme.get('theme', '')}"
             theme_para = theme_frame.paragraphs[0]
-            theme_para.font.size = Pt(20)
+            theme_para.font.size = Pt(16)
             theme_para.font.bold = True
             
-            # Priority
             priority = theme.get('priority', 'low')
             priority_text = theme_frame.add_paragraph()
             priority_text.text = f"Priority: {priority.upper()}"
-            priority_text.font.size = Pt(16)
+            priority_text.font.size = Pt(14)
+            
             if priority == 'high':
                 priority_text.font.color.rgb = RGBColor(245, 87, 108)
             elif priority == 'medium':
@@ -1408,13 +1662,32 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
             else:
                 priority_text.font.color.rgb = RGBColor(102, 187, 106)
             
-            # Recommendation
             rec_text = theme_frame.add_paragraph()
-            rec_text.text = f"💡 {theme.get('recommendation', '')[:100]}..."
-            rec_text.font.size = Pt(14)
+            rec_text.text = f"💡 {theme.get('recommendation', '')[:80]}..."
+            rec_text.font.size = Pt(12)
             rec_text.font.italic = True
             
-            y_pos += 1.5
+            y_pos += 1.3
+    
+    # Next steps slide
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    title = slide.shapes.title
+    title.text = "📋 Next Steps"
+    
+    next_steps = """
+    1. Review individual agent 5C scores
+    2. Schedule coaching sessions for high-priority themes
+    3. Focus on Connection & Clarity first (foundational)
+    4. Track improvement over next 30 days
+    5. Re-analyze to measure progress
+    """
+    
+    text_box = slide.shapes.add_textbox(Inches(2), Inches(2.5), Inches(6), Inches(3))
+    text_frame = text_box.text_frame
+    text_frame.text = next_steps
+    for para in text_frame.paragraphs:
+        para.font.size = Pt(24)
+        para.space_before = Pt(15)
     
     # Save to bytes
     ppt_bytes = io.BytesIO()
@@ -1526,7 +1799,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1897,8 +2170,10 @@ with tab2:
                                 
                                 with retry_col2:
                                     if st.button("🔄 Retry Analysis", use_container_width=True, type="primary"):
-                                        # Update model in session state
+                                        # Update model and clear processed state
                                         st.session_state.analysis_model = retry_model
+                                        st.session_state.processed = False
+                                        st.session_state.coaching_insights = {}
                                         st.rerun()
                                 
                             else:
@@ -1931,6 +2206,8 @@ with tab2:
                             with retry_col2:
                                 if st.button("🔄 Retry Analysis", use_container_width=True, type="primary", key="retry_btn_error"):
                                     st.session_state.analysis_model = retry_model
+                                    st.session_state.processed = False
+                                    st.session_state.coaching_insights = {}
                                     st.rerun()
                         finally:
                             loop.close()
