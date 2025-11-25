@@ -14,6 +14,11 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
+import asyncio
+import aiohttp
+from asyncio import Semaphore
+import time
+from collections import deque
 
 # Page config
 st.set_page_config(
@@ -215,6 +220,14 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'processed' not in st.session_state:
     st.session_state.processed = False
+if 'processing_stats' not in st.session_state:
+    st.session_state.processing_stats = {
+        'total_batches': 0,
+        'completed_batches': 0,
+        'failed_batches': 0,
+        'start_time': None,
+        'total_tokens': 0
+    }
 
 # Model configurations
 MODELS = {
@@ -270,6 +283,36 @@ DEFAULT_THEMES = [
     "Product Knowledge",
     "Confidence in Responses"
 ]
+
+class RateLimiter:
+    """Token bucket rate limiter for API calls"""
+    def __init__(self, calls_per_minute: int):
+        self.calls_per_minute = calls_per_minute
+        self.tokens = calls_per_minute
+        self.last_update = time.time()
+        self.lock = asyncio.Lock()
+    
+    async def acquire(self):
+        async with self.lock:
+            now = time.time()
+            elapsed = now - self.last_update
+            
+            # Refill tokens based on elapsed time
+            self.tokens = min(
+                self.calls_per_minute,
+                self.tokens + (elapsed * self.calls_per_minute / 60)
+            )
+            self.last_update = now
+            
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return
+            
+            # Wait until next token available
+            wait_time = (1 - self.tokens) * 60 / self.calls_per_minute
+            await asyncio.sleep(wait_time)
+            self.tokens = 0
+            self.last_update = time.time()
 
 def redact_pii(text: str) -> str:
     """Redact PII from text"""
@@ -401,8 +444,22 @@ def load_file_to_dataframe(uploaded_file) -> pd.DataFrame:
     
     return pd.DataFrame(expanded_rows)
 
-def call_llm(model: str, messages: List[Dict], temperature: float = 0.3, is_json: bool = True) -> Dict:
-    """Call OpenRouter API"""
+async def call_llm_async(
+    session: aiohttp.ClientSession,
+    model: str,
+    messages: List[Dict],
+    temperature: float = 0.3,
+    is_json: bool = True,
+    provider: str = "openrouter",
+    api_key: str = None,
+    local_url: str = None,
+    rate_limiter: RateLimiter = None
+) -> Dict:
+    """Async LLM call supporting OpenRouter and Local LLM"""
+    
+    if rate_limiter:
+        await rate_limiter.acquire()
+    
     payload = {
         "model": model,
         "messages": messages,
@@ -410,16 +467,60 @@ def call_llm(model: str, messages: List[Dict], temperature: float = 0.3, is_json
         "max_tokens": 2000
     }
     
-    if is_json:
+    if is_json and provider == "openrouter":
         payload["response_format"] = {"type": "json_object"}
     
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Content-Type": "application/json"},
-            json=payload,
-            timeout=60
-        )
+        if provider == "openrouter":
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}" if api_key else ""
+            }
+        else:  # local LLM
+            url = local_url or "http://localhost:1234/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+        
+        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                error_text = await response.text()
+                return {"error": f"HTTP {response.status}: {error_text}"}
+                
+    except asyncio.TimeoutError:
+        return {"error": "Request timeout"}
+    except Exception as e:
+        return {"error": str(e)}
+
+def call_llm(model: str, messages: List[Dict], temperature: float = 0.3, is_json: bool = True) -> Dict:
+    """Synchronous wrapper for backward compatibility (used in chat)"""
+    provider = st.session_state.get('llm_provider', 'openrouter')
+    api_key = st.session_state.get('openrouter_api_key')
+    local_url = st.session_state.get('local_llm_url')
+    
+    if provider == "openrouter":
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}" if api_key else ""
+        }
+    else:
+        url = local_url or "http://localhost:1234/v1/chat/completions"
+        headers = {"Content-Type": "application/json"}
+    
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": 2000
+    }
+    
+    if is_json and provider == "openrouter":
+        payload["response_format"] = {"type": "json_object"}
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -427,7 +528,7 @@ def call_llm(model: str, messages: List[Dict], temperature: float = 0.3, is_json
         return None
 
 def process_agent_batch(agent_name: str, calls_df: pd.DataFrame, themes: List[str], model: str) -> Dict:
-    """Process batch of calls for an agent"""
+    """Process batch of calls for an agent (kept for backward compatibility)"""
     
     # Create compressed context
     call_summaries = []
@@ -500,6 +601,129 @@ Identify top 3-5 coaching opportunities with specific examples and actionable re
             return None
     
     return None
+
+async def process_agent_batch_async(
+    session: aiohttp.ClientSession,
+    agent_name: str,
+    calls_df: pd.DataFrame,
+    themes: List[str],
+    model: str,
+    provider: str,
+    api_key: str,
+    local_url: str,
+    rate_limiter: RateLimiter,
+    semaphore: Semaphore
+) -> Tuple[str, Dict]:
+    """Async process batch of calls for an agent"""
+    
+    async with semaphore:
+        # Create compressed context
+        call_summaries = []
+        for idx, call_id in enumerate(calls_df['call_id'].unique()[:10], 1):
+            call_data = calls_df[calls_df['call_id'] == call_id]
+            
+            sentiment = call_data['sentiment_score'].mean() if 'sentiment_score' in call_data.columns else None
+            
+            agent_msgs = call_data[call_data['speaker'] == 'agent']['message'].tolist()
+            customer_msgs = call_data[call_data['speaker'] == 'customer']['message'].tolist()
+            
+            summary = f"Call {idx}:"
+            if sentiment:
+                summary += f" [Sentiment: {sentiment:.2f}]"
+            summary += f"\n- Customer issues: {' | '.join(customer_msgs[:3])}"
+            summary += f"\n- Agent responses: {' | '.join(agent_msgs[:3])}"
+            
+            call_summaries.append(summary)
+        
+        system_prompt = f"""You are an expert contact center QA analyst. Analyze agent performance and identify coaching opportunities.
+
+Focus on these themes: {', '.join(themes)}
+
+Provide response as JSON with this exact structure:
+{{
+    "agent": "agent_name",
+    "calls_analyzed": number,
+    "coaching_themes": [
+        {{
+            "theme": "theme name from provided list",
+            "priority": "high|medium|low",
+            "frequency": number,
+            "examples": ["specific example 1", "specific example 2"],
+            "recommendation": "specific actionable advice"
+        }}
+    ],
+    "strengths": ["strength 1", "strength 2"],
+    "overall_sentiment_correlation": "insight about sentiment and performance"
+}}
+
+CRITICAL: Only use themes from the provided list. Be specific and data-driven."""
+
+        user_prompt = f"""Agent: {agent_name}
+Calls analyzed: {len(calls_df['call_id'].unique())}
+
+Call Summaries:
+{chr(10).join(call_summaries)}
+
+Identify top 3-5 coaching opportunities with specific examples and actionable recommendations."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response = await call_llm_async(
+            session, model, messages,
+            provider=provider,
+            api_key=api_key,
+            local_url=local_url,
+            rate_limiter=rate_limiter
+        )
+        
+        if response and 'choices' in response and not response.get('error'):
+            try:
+                content = response['choices'][0]['message']['content']
+                content = re.sub(r'```json\n?', '', content)
+                content = re.sub(r'```\n?', '', content)
+                result = json.loads(content.strip())
+                return (agent_name, result)
+            except json.JSONDecodeError:
+                return (agent_name, None)
+        
+        return (agent_name, None)
+
+async def process_all_agents_parallel(
+    agents_data: List[Tuple[str, pd.DataFrame]],
+    themes: List[str],
+    model: str,
+    provider: str,
+    api_key: str,
+    local_url: str,
+    max_concurrent: int = 10,
+    calls_per_minute: int = 50
+) -> Dict:
+    """Process all agents in parallel with rate limiting"""
+    
+    rate_limiter = RateLimiter(calls_per_minute)
+    semaphore = Semaphore(max_concurrent)
+    
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            process_agent_batch_async(
+                session, agent_name, agent_df, themes, model,
+                provider, api_key, local_url, rate_limiter, semaphore
+            )
+            for agent_name, agent_df in agents_data
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    insights = {}
+    for result in results:
+        if isinstance(result, tuple) and result[1]:
+            agent_name, data = result
+            insights[agent_name] = data
+    
+    return insights
 
 def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     """Generate beautiful HTML report"""
@@ -1050,15 +1274,80 @@ with st.sidebar:
     st.markdown("### 🎯 QA Coaching Intelligence")
     st.markdown("---")
     
-    st.markdown("#### Analysis Model")
-    analysis_model = st.selectbox(
-        "Select model:",
-        options=list(MODELS.keys()),
-        format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}" + (" ✨" if MODELS[x].get('recommended') else ""),
-        index=0
+    st.markdown("#### LLM Provider")
+    llm_provider = st.radio(
+        "Select provider:",
+        ["OpenRouter", "Local LLM (LM Studio/Ollama)"],
+        key="llm_provider_radio"
     )
     
-    st.info(f"**Best for:** {MODELS[analysis_model]['best_for']}\n\n**Speed:** {MODELS[analysis_model]['speed']}")
+    if llm_provider == "OpenRouter":
+        st.session_state.llm_provider = "openrouter"
+        
+        # Try to get API key from secrets first
+        try:
+            api_key = st.secrets.get("OPENROUTER_API_KEY", "")
+            if api_key:
+                st.session_state.openrouter_api_key = api_key
+                st.success("✅ API key loaded from secrets")
+            else:
+                # Fallback to manual input
+                api_key = st.text_input("OpenRouter API Key:", type="password", key="api_key_input")
+                st.session_state.openrouter_api_key = api_key
+                if not api_key:
+                    st.warning("⚠️ API key required")
+        except:
+            # No secrets available, use manual input
+            api_key = st.text_input("OpenRouter API Key:", type="password", key="api_key_input")
+            st.session_state.openrouter_api_key = api_key
+            if not api_key:
+                st.warning("⚠️ API key required")
+    else:
+        st.session_state.llm_provider = "local"
+        local_url = st.text_input(
+            "Local LLM URL:",
+            value="http://localhost:1234/v1/chat/completions",
+            key="local_llm_url_input"
+        )
+        st.session_state.local_llm_url = local_url
+        st.info("💡 Make sure LM Studio or Ollama is running")
+    
+    st.markdown("---")
+    st.markdown("#### Analysis Model")
+    
+    if st.session_state.llm_provider == "openrouter":
+        analysis_model = st.selectbox(
+            "Select model:",
+            options=list(MODELS.keys()),
+            format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}" + (" ✨" if MODELS[x].get('recommended') else ""),
+            index=0
+        )
+        st.info(f"**Best for:** {MODELS[analysis_model]['best_for']}\n\n**Speed:** {MODELS[analysis_model]['speed']}")
+    else:
+        analysis_model = st.text_input(
+            "Model name:",
+            value="llama3",
+            help="Enter the model name from LM Studio/Ollama"
+        )
+    
+    st.markdown("---")
+    st.markdown("#### Processing Settings")
+    
+    max_concurrent = st.slider(
+        "Concurrent requests:",
+        min_value=5,
+        max_value=20,
+        value=10,
+        help="More = faster but may hit rate limits"
+    )
+    
+    calls_per_minute = st.number_input(
+        "Rate limit (calls/min):",
+        min_value=10,
+        max_value=100,
+        value=50,
+        help="Your OpenRouter/API rate limit"
+    )
     
     st.markdown("---")
     st.markdown("#### Coaching Themes")
@@ -1110,7 +1399,13 @@ with tab1:
     st.markdown("---")
     
     if uploaded_files and st.button("🚀 Process Transcripts", use_container_width=True):
-        with st.spinner("Processing..."):
+        
+        # Validation
+        if st.session_state.llm_provider == "openrouter" and not st.session_state.get('openrouter_api_key'):
+            st.error("❌ Please provide OpenRouter API key")
+            st.stop()
+        
+        with st.spinner("Loading files..."):
             all_data = []
             
             for uploaded_file in uploaded_files:
@@ -1121,64 +1416,134 @@ with tab1:
                         df['call_id'] = [f"CALL_{i:04d}" for i in range(len(df))]
                     all_data.append(df)
             
-            if all_data:
-                combined_df = pd.concat(all_data, ignore_index=True)
+            if not all_data:
+                st.error("No valid data loaded")
+                st.stop()
+            
+            combined_df = pd.concat(all_data, ignore_index=True)
+            
+            # Normalize speakers
+            if 'speaker' in combined_df.columns:
+                combined_df['speaker'] = combined_df['speaker'].apply(normalize_speaker)
+            
+            # Convert to parquet and store
+            parquet_bytes = convert_to_parquet(combined_df, 'transcripts.parquet')
+            st.session_state.transcripts_parquet = parquet_bytes
+            
+            # Load into DuckDB
+            conn = st.session_state.duckdb_conn
+            conn.execute("DROP TABLE IF EXISTS transcripts")
+            conn.execute("CREATE TABLE transcripts AS SELECT * FROM combined_df")
+            
+            st.success(f"✅ Loaded {len(combined_df)} rows from {len(uploaded_files)} file(s)")
+        
+        # Get unique agents and prepare batches
+        if 'agent' in combined_df.columns:
+            agents = combined_df.groupby('agent')
+        else:
+            st.error("No agent column found")
+            st.stop()
+        
+        agents_data = [(agent, group) for agent, group in agents]
+        total_agents = len(agents_data)
+        
+        st.markdown(f"### 📊 Processing {total_agents} agents")
+        
+        # Processing stats
+        st.session_state.processing_stats = {
+            'total_batches': total_agents,
+            'completed_batches': 0,
+            'failed_batches': 0,
+            'start_time': time.time(),
+            'total_tokens': 0
+        }
+        
+        # Create progress containers
+        progress_container = st.container()
+        with progress_container:
+            progress_bar = st.progress(0.0)
+            status_col1, status_col2, status_col3 = st.columns(3)
+            
+            with status_col1:
+                completed_metric = st.empty()
+            with status_col2:
+                speed_metric = st.empty()
+            with status_col3:
+                eta_metric = st.empty()
+            
+            log_expander = st.expander("📋 Processing Log", expanded=False)
+            log_container = log_expander.container()
+        
+        # Run parallel processing
+        async def run_processing():
+            insights = await process_all_agents_parallel(
+                agents_data,
+                coaching_themes,
+                analysis_model,
+                st.session_state.llm_provider,
+                st.session_state.get('openrouter_api_key'),
+                st.session_state.get('local_llm_url'),
+                max_concurrent=max_concurrent,
+                calls_per_minute=calls_per_minute
+            )
+            return insights
+        
+        # Execute async processing with progress updates
+        start_time = time.time()
+        
+        # Create task
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Process with simulated progress (since we can't get real-time updates from gather)
+        placeholder_insights = {}
+        
+        # Start processing
+        with st.spinner("Processing agents in parallel..."):
+            try:
+                insights = loop.run_until_complete(run_processing())
                 
-                # Normalize speakers
-                if 'speaker' in combined_df.columns:
-                    combined_df['speaker'] = combined_df['speaker'].apply(normalize_speaker)
+                elapsed = time.time() - start_time
                 
-                # Convert to parquet and store
-                parquet_bytes = convert_to_parquet(combined_df, 'transcripts.parquet')
-                st.session_state.transcripts_parquet = parquet_bytes
+                progress_bar.progress(1.0)
+                completed_metric.metric("Completed", f"{len(insights)}/{total_agents}")
+                speed_metric.metric("Speed", f"{len(insights)/elapsed:.1f} agents/sec")
+                eta_metric.metric("Total Time", f"{elapsed:.1f}s")
                 
-                # Load into DuckDB
-                conn = st.session_state.duckdb_conn
-                conn.execute("DROP TABLE IF EXISTS transcripts")
-                conn.execute("CREATE TABLE transcripts AS SELECT * FROM combined_df")
-                
-                # Get unique agents
-                if 'agent' in combined_df.columns:
-                    agents = combined_df['agent'].unique()
-                elif 'speaker' in combined_df.columns:
-                    agents = combined_df[combined_df['speaker'] == 'agent']['speaker'].unique()
-                else:
-                    st.error("No agent column found")
-                    st.stop()
-                
-                # Process agents in batches
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                insights = {}
-                
-                for idx, agent in enumerate(agents):
-                    status_text.text(f"Analyzing {agent}...")
-                    
-                    # Get agent's calls
-                    if 'agent' in combined_df.columns:
-                        agent_calls = combined_df[combined_df['agent'] == agent]
-                    else:
-                        # Get calls where this agent spoke
-                        agent_call_ids = combined_df[combined_df['speaker'] == 'agent']['call_id'].unique()
-                        agent_calls = combined_df[combined_df['call_id'].isin(agent_call_ids)]
-                    
-                    # Process
-                    result = process_agent_batch(agent, agent_calls, coaching_themes, analysis_model)
-                    
-                    if result:
-                        insights[agent] = result
-                    
-                    progress_bar.progress((idx + 1) / len(agents))
+                with log_container:
+                    st.success(f"✅ Processed {len(insights)} agents in {elapsed:.1f} seconds")
+                    if len(insights) < total_agents:
+                        st.warning(f"⚠️ {total_agents - len(insights)} agents failed to process")
                 
                 st.session_state.coaching_insights = insights
                 st.session_state.processed = True
                 st.session_state.processed_df = combined_df
                 
-                status_text.empty()
-                progress_bar.empty()
+                # Show summary stats
+                total_themes = sum(len(agent_data.get('coaching_themes', [])) for agent_data in insights.values())
+                
+                st.markdown("---")
+                summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+                with summary_col1:
+                    st.metric("Total Calls", len(combined_df['call_id'].unique()))
+                with summary_col2:
+                    st.metric("Agents Analyzed", len(insights))
+                with summary_col3:
+                    st.metric("Coaching Opportunities", total_themes)
+                with summary_col4:
+                    st.metric("Processing Time", f"{elapsed:.1f}s")
                 
                 st.markdown("<div class='success-banner'>✨ Processing Complete! Check the Dashboard tab.</div>", unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"Processing failed: {str(e)}")
+                with log_container:
+                    st.error(f"Error: {str(e)}")
+            finally:
+                loop.close()
     
     st.markdown("</div>", unsafe_allow_html=True)
 
