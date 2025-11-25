@@ -342,51 +342,48 @@ def normalize_speaker(speaker: str) -> str:
 def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
     """Parse multiline transcript from single cell into conversation turns
     
-    Handles two formats:
-    1. Pipe-separated: "2025-02-07 13:17:57 +0000 Consumer: Hi! | 2025-02-07 13:18:01 +0000 Agent: Hello"
-    2. Newline with brackets: "[12:30:08 AGENT]: Hello\n[12:30:15 CUSTOMER]: Hi"
+    Handles formats:
+    1. Bracket with newline: "[12:30:08 AGENT]:\n message"
+    2. Bracket inline: "[12:30:08 AGENT]: message"
+    3. Pipe-separated: "2025-02-07 13:17:57 +0000 Consumer: Hi! | 2025-02-07 13:18:01 +0000 Agent: Hello"
     """
     turns = []
     
-    # Check if pipe-separated format
-    if '|' in transcript_text:
-        # Split by pipe
-        segments = transcript_text.split('|')
-    else:
-        # Split by newline
-        segments = transcript_text.split('\n')
+    # Pattern for bracket format with optional newline: "[12:30:08 AGENT]:\n message" or "[12:30:08 AGENT]: message"
+    # Using re.DOTALL to match across newlines
+    bracket_pattern = r'\[([\d:]+)\s+([^\]]+)\]:\s*\n?\s*(.*?)(?=\[[\d:]+\s+[^\]]+\]:|$)'
     
     # Pattern for pipe format: "2025-02-07 13:17:57 +0000 Consumer: message"
     pipe_pattern = r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+([^:]+):\s*(.*)'
     
-    # Pattern for bracket format: "[12:30:08 AGENT]: message"
-    bracket_pattern = r'\[([\d:]+)\s+([^\]]+)\]:\s*(.*)'
-    
-    for segment in segments:
-        segment = segment.strip()
-        if not segment:
-            continue
-        
-        # Try pipe format first
-        match = re.match(pipe_pattern, segment)
-        if match:
-            timestamp, speaker, message = match.groups()
-            turns.append({
-                'timestamp': timestamp,
-                'speaker': normalize_speaker(speaker.strip()),
-                'message': redact_pii(message.strip())
-            })
-            continue
-        
-        # Try bracket format
-        match = re.match(bracket_pattern, segment)
-        if match:
-            timestamp, speaker, message = match.groups()
-            turns.append({
-                'timestamp': timestamp,
-                'speaker': normalize_speaker(speaker.strip()),
-                'message': redact_pii(message.strip())
-            })
+    # Check if pipe-separated format
+    if '|' in transcript_text:
+        segments = transcript_text.split('|')
+        for segment in segments:
+            segment = segment.strip()
+            if not segment:
+                continue
+            match = re.match(pipe_pattern, segment)
+            if match:
+                timestamp, speaker, message = match.groups()
+                turns.append({
+                    'timestamp': timestamp,
+                    'speaker': normalize_speaker(speaker.strip()),
+                    'message': redact_pii(message.strip())
+                })
+    else:
+        # Try bracket format with regex findall (handles newlines)
+        matches = re.findall(bracket_pattern, transcript_text, re.DOTALL)
+        for match in matches:
+            timestamp, speaker, message = match
+            # Clean up message (remove extra whitespace/newlines)
+            message = ' '.join(message.split())
+            if message:
+                turns.append({
+                    'timestamp': timestamp.strip(),
+                    'speaker': normalize_speaker(speaker.strip()),
+                    'message': redact_pii(message.strip())
+                })
     
     return turns
 
@@ -1467,6 +1464,8 @@ with tab1:
                     
                     # Parse transcripts and expand
                     expanded_rows = []
+                    parse_failures = []
+                    
                     for idx, row in df.iterrows():
                         call_id = row[call_id_col]
                         agent_name = row[agent_col]
@@ -1475,6 +1474,14 @@ with tab1:
                         
                         # Parse transcript
                         turns = parse_multiline_transcript(str(transcript_text))
+                        
+                        if not turns:
+                            parse_failures.append({
+                                'call_id': call_id,
+                                'agent': agent_name,
+                                'transcript_preview': str(transcript_text)[:200]
+                            })
+                            continue
                         
                         for turn in turns:
                             expanded_rows.append({
@@ -1487,15 +1494,24 @@ with tab1:
                                 'original_transcript': transcript_text
                             })
                     
+                    if parse_failures:
+                        st.warning(f"⚠️ Failed to parse {len(parse_failures)} transcripts. Check format.")
+                        with st.expander("Show failed transcripts"):
+                            st.write(pd.DataFrame(parse_failures))
+                    
+                    if not expanded_rows:
+                        st.error("❌ No transcripts could be parsed. Please check your data format.")
+                        st.info("Expected formats:\n- `[12:30:08 AGENT]: message`\n- `2025-02-07 13:17:57 +0000 Agent: message | 2025-02-07 13:18:01 +0000 Customer: response`")
+                        st.stop()
+                    
                     expanded_df = pd.DataFrame(expanded_rows)
                     
-                    # Register and reload into DuckDB
-                    conn.register('expanded_df_view', expanded_df)
-                    conn.execute("DROP TABLE IF EXISTS transcripts")
-                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df_view")
-                    conn.unregister('expanded_df_view')
-                    
+                    # Store in session state first
                     st.session_state.processed_df = expanded_df
+                    
+                    # Reload into DuckDB using direct DataFrame reference
+                    conn.execute("DROP TABLE IF EXISTS transcripts")
+                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
                     
                     # Run DuckDB analytics
                     analytics = {}
