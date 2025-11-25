@@ -740,7 +740,6 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>QA Coaching Intelligence Report</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
         <style>
             * {{
@@ -1034,7 +1033,163 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             
             <h2 class="section-title">📊 Coaching Theme Distribution</h2>
             <div class="chart-container">
-                <canvas id="themeChart" height="100"></canvas>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 20px;">
+    """
+    
+    # Prepare theme data with icons
+    theme_icons = {
+        "Active Listening": "👂",
+        "Empathy": "❤️",
+        "Communication": "💬",
+        "Professional": "👔",
+        "Resolution": "✅",
+        "Problem": "🔍",
+        "Solution": "💡",
+        "Response Time": "⏱️",
+        "Process": "📋",
+        "Escalation": "⬆️",
+        "Proactive": "🎯",
+        "Expectations": "📊",
+        "Difficult": "😤",
+        "Rapport": "🤝",
+        "Knowledge": "📚",
+        "Confidence": "💪"
+    }
+    
+    theme_counts = {}
+    for agent_data in insights.values():
+        for theme in agent_data.get('coaching_themes', []):
+            theme_name = theme.get('theme', '')
+            theme_counts[theme_name] = theme_counts.get(theme_name, 0) + 1
+    
+    sorted_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)[:8]
+    max_count = max([c for _, c in sorted_themes]) if sorted_themes else 1
+    
+    for theme_name, count in sorted_themes:
+        # Find matching icon
+        icon = "🎯"
+        for key, emoji in theme_icons.items():
+            if key.lower() in theme_name.lower():
+                icon = emoji
+                break
+        
+        percentage = (count / max_count) * 100
+        
+        html += f"""
+                    <div style="background: white; border-radius: 20px; padding: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); transition: all 0.3s ease; border-left: 5px solid #667eea;">
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                            <div style="font-size: 2.5rem;">{icon}</div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 700; font-size: 1.1rem; color: #333; margin-bottom: 5px;">{theme_name}</div>
+                                <div style="font-size: 0.9rem; color: #666;">Frequency: {count} agents</div>
+                            </div>
+                        </div>
+                        <div style="background: #f0f0f0; height: 12px; border-radius: 10px; overflow: hidden;">
+                            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; width: {percentage}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                        </div>
+                    </div>
+        """
+    
+    html += """
+                </div>
+            </div>
+            
+            <h2 class="section-title">📋 Agent Performance Summary</h2>
+            <div style="overflow-x: auto; margin: 30px 0;">
+                <table style="width: 100%; border-collapse: separate; border-spacing: 0 15px;">
+                    <thead>
+                        <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem; border-radius: 10px 0 0 10px;">👤 Agent</th>
+                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem;">📊 Calls</th>
+                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem;">🎯 Top Area of Improvement</th>
+                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem; border-radius: 0 10px 10px 0;">📈 Priority</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    """
+    
+    # Add agent rows
+    for agent_name, agent_data in insights.items():
+        themes = agent_data.get('coaching_themes', [])
+        calls = agent_data.get('calls_analyzed', 0)
+        
+        if themes:
+            top_theme = themes[0]
+            theme_name = top_theme.get('theme', 'N/A')
+            priority = top_theme.get('priority', 'low')
+            
+            # Get icon for theme
+            icon = "🎯"
+            for key, emoji in theme_icons.items():
+                if key.lower() in theme_name.lower():
+                    icon = emoji
+                    break
+            
+            # Priority colors
+            if priority == 'high':
+                priority_color = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
+                priority_icon = "🔴"
+            elif priority == 'medium':
+                priority_color = "linear-gradient(135deg, #ffd89b 0%, #ffa726 100%)"
+                priority_icon = "🟡"
+            else:
+                priority_color = "linear-gradient(135deg, #a8edea 0%, #66bb6a 100%)"
+                priority_icon = "🟢"
+            
+            html += f"""
+                        <tr style="background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: all 0.3s ease;">
+                            <td style="padding: 20px; font-weight: 700; font-size: 1.05rem; color: #333; border-radius: 10px 0 0 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <div style="width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
+                                        {agent_name[0].upper()}
+                                    </div>
+                                    {agent_name}
+                                </div>
+                            </td>
+                            <td style="padding: 20px;">
+                                <div style="display: inline-block; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: #666;">
+                                    {calls} calls
+                                </div>
+                            </td>
+                            <td style="padding: 20px;">
+                                <div style="display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); padding: 10px 20px; border-radius: 25px; border: 2px solid #667eea30;">
+                                    <span style="font-size: 1.5rem;">{icon}</span>
+                                    <span style="font-weight: 600; color: #333;">{theme_name}</span>
+                                </div>
+                            </td>
+                            <td style="padding: 20px; border-radius: 0 10px 10px 0;">
+                                <div style="display: inline-flex; align-items: center; gap: 8px; background: {priority_color}; padding: 10px 20px; border-radius: 25px; color: white; font-weight: 700; text-transform: uppercase; font-size: 0.9rem;">
+                                    <span>{priority_icon}</span>
+                                    <span>{priority}</span>
+                                </div>
+                            </td>
+                        </tr>
+            """
+        else:
+            html += f"""
+                        <tr style="background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                            <td style="padding: 20px; font-weight: 700; font-size: 1.05rem; color: #333; border-radius: 10px 0 0 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <div style="width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
+                                        {agent_name[0].upper()}
+                                    </div>
+                                    {agent_name}
+                                </div>
+                            </td>
+                            <td style="padding: 20px;">
+                                <div style="display: inline-block; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: #666;">
+                                    {calls} calls
+                                </div>
+                            </td>
+                            <td style="padding: 20px;" colspan="2">
+                                <div style="color: #999; font-style: italic;">No coaching themes identified</div>
+                            </td>
+                        </tr>
+            """
+    
+    html += """
+                    </tbody>
+                </table>
             </div>
             
             <h2 class="section-title">👥 Agent Coaching Details</h2>
@@ -1096,7 +1251,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         
         html += "</div>"
     
-    # Close HTML and add Chart.js
+    # Close HTML
     html += """
             </div>
             
@@ -1104,61 +1259,6 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 <p>QA Coaching Intelligence Platform | Powered by AI Analytics</p>
             </div>
         </div>
-        
-        <script>
-    """
-    
-    # Prepare chart data
-    theme_counts = {}
-    for agent_data in insights.values():
-        for theme in agent_data.get('coaching_themes', []):
-            theme_name = theme.get('theme', '')
-            theme_counts[theme_name] = theme_counts.get(theme_name, 0) + 1
-    
-    sorted_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-    
-    html += f"""
-            const ctx = document.getElementById('themeChart').getContext('2d');
-            new Chart(ctx, {{
-                type: 'bar',
-                data: {{
-                    labels: {json.dumps([t[0] for t in sorted_themes])},
-                    datasets: [{{
-                        label: 'Frequency',
-                        data: {json.dumps([t[1] for t in sorted_themes])},
-                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
-                        borderColor: 'rgba(102, 126, 234, 1)',
-                        borderWidth: 2,
-                        borderRadius: 10
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {{
-                        legend: {{
-                            display: false
-                        }},
-                        title: {{
-                            display: true,
-                            text: 'Top 10 Coaching Themes Across All Agents',
-                            font: {{
-                                size: 18,
-                                weight: 'bold'
-                            }}
-                        }}
-                    }},
-                    scales: {{
-                        y: {{
-                            beginAtZero: true,
-                            ticks: {{
-                                stepSize: 1
-                            }}
-                        }}
-                    }}
-                }}
-            }});
-        </script>
     </body>
     </html>
     """
@@ -1372,7 +1472,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
