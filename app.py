@@ -590,79 +590,106 @@ async def process_agent_batch_async(
     """Async process batch of calls for an agent"""
     
     async with semaphore:
-        # Create compressed context
-        call_summaries = []
-        for idx, call_id in enumerate(calls_df['call_id'].unique()[:10], 1):
-            call_data = calls_df[calls_df['call_id'] == call_id]
+        try:
+            # Get unique call IDs for this agent (limit to 5-7 calls max)
+            unique_calls = calls_df['call_id'].unique()[:7]  # Reduced to 7 calls max
             
-            sentiment = call_data['sentiment_score'].mean() if 'sentiment_score' in call_data.columns else None
+            # Create compressed context
+            call_summaries = []
+            for idx, call_id in enumerate(unique_calls, 1):
+                call_data = calls_df[calls_df['call_id'] == call_id]
+                
+                sentiment = call_data['sentiment_score'].mean() if 'sentiment_score' in call_data.columns else None
+                
+                # Get only first 3 messages from each side to keep it concise
+                agent_msgs = call_data[call_data['speaker'] == 'agent']['message'].tolist()[:3]
+                customer_msgs = call_data[call_data['speaker'] == 'customer']['message'].tolist()[:3]
+                
+                # Compress messages further (first 100 chars each)
+                agent_msgs_short = [msg[:100] + '...' if len(msg) > 100 else msg for msg in agent_msgs]
+                customer_msgs_short = [msg[:100] + '...' if len(msg) > 100 else msg for msg in customer_msgs]
+                
+                summary = f"Call {idx}:"
+                if sentiment:
+                    summary += f" [Sentiment: {sentiment:.2f}]"
+                summary += f"\n- Customer: {' | '.join(customer_msgs_short)}"
+                summary += f"\n- Agent: {' | '.join(agent_msgs_short)}"
+                
+                call_summaries.append(summary)
             
-            agent_msgs = call_data[call_data['speaker'] == 'agent']['message'].tolist()
-            customer_msgs = call_data[call_data['speaker'] == 'customer']['message'].tolist()
-            
-            summary = f"Call {idx}:"
-            if sentiment:
-                summary += f" [Sentiment: {sentiment:.2f}]"
-            summary += f"\n- Customer issues: {' | '.join(customer_msgs[:3])}"
-            summary += f"\n- Agent responses: {' | '.join(agent_msgs[:3])}"
-            
-            call_summaries.append(summary)
-        
-        system_prompt = f"""You are an expert contact center QA analyst. Analyze agent performance and identify coaching opportunities.
+            system_prompt = f"""You are an expert contact center QA analyst. Analyze agent performance and identify coaching opportunities.
 
-Focus on these themes: {', '.join(themes)}
+Focus on these themes: {', '.join(themes[:10])}
 
 Provide response as JSON with this exact structure:
 {{
-    "agent": "agent_name",
-    "calls_analyzed": number,
+    "agent": "{agent_name}",
+    "calls_analyzed": {len(unique_calls)},
     "coaching_themes": [
         {{
             "theme": "theme name from provided list",
             "priority": "high|medium|low",
-            "frequency": number,
-            "examples": ["specific example 1", "specific example 2"],
+            "frequency": 1,
+            "examples": ["brief example"],
             "recommendation": "specific actionable advice"
         }}
     ],
     "strengths": ["strength 1", "strength 2"],
-    "overall_sentiment_correlation": "insight about sentiment and performance"
+    "overall_sentiment_correlation": "brief insight"
 }}
 
-CRITICAL: Only use themes from the provided list. Be specific and data-driven."""
+CRITICAL: Only use themes from the provided list. Be specific and data-driven. Keep response concise."""
 
-        user_prompt = f"""Agent: {agent_name}
-Calls analyzed: {len(calls_df['call_id'].unique())}
+            user_prompt = f"""Agent: {agent_name}
+Calls analyzed: {len(unique_calls)}
 
 Call Summaries:
 {chr(10).join(call_summaries)}
 
-Identify top 3-5 coaching opportunities with specific examples and actionable recommendations."""
+Identify top 3 coaching opportunities with specific examples and actionable recommendations."""
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        
-        response = await call_llm_async(
-            session, model, messages,
-            provider=provider,
-            api_key=api_key,
-            local_url=local_url,
-            rate_limiter=rate_limiter
-        )
-        
-        if response and 'choices' in response and not response.get('error'):
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            
+            response = await call_llm_async(
+                session, model, messages,
+                provider=provider,
+                api_key=api_key,
+                local_url=local_url,
+                rate_limiter=rate_limiter
+            )
+            
+            if not response:
+                print(f"[ERROR] {agent_name}: No response from LLM")
+                return (agent_name, None)
+            
+            if 'error' in response:
+                print(f"[ERROR] {agent_name}: {response['error']}")
+                return (agent_name, None)
+            
+            if 'choices' not in response:
+                print(f"[ERROR] {agent_name}: No 'choices' in response: {response}")
+                return (agent_name, None)
+            
             try:
                 content = response['choices'][0]['message']['content']
                 content = re.sub(r'```json\n?', '', content)
                 content = re.sub(r'```\n?', '', content)
                 result = json.loads(content.strip())
+                print(f"[SUCCESS] {agent_name}: Generated {len(result.get('coaching_themes', []))} themes")
                 return (agent_name, result)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"[ERROR] {agent_name}: JSON parse failed: {str(e)}")
+                print(f"[ERROR] Content: {content[:200]}")
                 return (agent_name, None)
         
-        return (agent_name, None)
+        except Exception as e:
+            print(f"[ERROR] {agent_name}: Exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return (agent_name, None)
 
 async def process_all_agents_parallel(
     agents_data: List[Tuple[str, pd.DataFrame]],
@@ -1667,7 +1694,26 @@ with tab2:
                         
                         try:
                             status_text.text("Processing agents in parallel...")
+                            
+                            # Create log container
+                            with st.expander("📋 Processing Logs", expanded=True):
+                                log_container = st.empty()
+                                logs = []
+                                
+                                # Monkey patch print to capture logs
+                                import sys
+                                from io import StringIO
+                                old_stdout = sys.stdout
+                                sys.stdout = log_buffer = StringIO()
+                            
                             insights = loop.run_until_complete(run_processing())
+                            
+                            # Restore stdout and get logs
+                            sys.stdout = old_stdout
+                            log_text = log_buffer.getvalue()
+                            if log_text:
+                                with st.expander("📋 Processing Logs", expanded=True):
+                                    st.code(log_text)
                             
                             elapsed = time.time() - start_time
                             
@@ -1675,7 +1721,7 @@ with tab2:
                             status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
                             
                             if not insights:
-                                log_area.error("⚠️ No insights generated. Check LLM connection and logs.")
+                                log_area.error("⚠️ No insights generated. Check logs above.")
                             
                             st.session_state.coaching_insights = insights
                             st.session_state.processed = True
