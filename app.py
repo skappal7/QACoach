@@ -926,34 +926,34 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             
             .metrics-grid {{
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 30px;
-                margin-bottom: 50px;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 30px;
             }}
             
             .metric-card {{
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 30px;
-                border-radius: 20px;
+                padding: 20px;
+                border-radius: 15px;
                 color: white;
-                box-shadow: 0 10px 30px rgba(102,126,234,0.3);
+                box-shadow: 0 4px 12px rgba(102,126,234,0.2);
                 transition: transform 0.3s ease;
             }}
             
             .metric-card:hover {{
-                transform: translateY(-5px);
+                transform: translateY(-3px);
             }}
             
             .metric-label {{
-                font-size: 0.9rem;
+                font-size: 0.85rem;
                 opacity: 0.9;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
                 text-transform: uppercase;
                 letter-spacing: 1px;
             }}
             
             .metric-value {{
-                font-size: 3rem;
+                font-size: 2rem;
                 font-weight: 700;
             }}
             
@@ -1171,11 +1171,11 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <h2 class="section-title">📊 5C Coaching Framework Analysis</h2>
-            <div style="margin: 30px 0; padding: 30px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 20px;">
-                <p style="font-size: 1.1rem; color: #666; text-align: center; margin-bottom: 40px;">
+            <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 15px;">
+                <p style="font-size: 0.95rem; color: #666; text-align: center; margin-bottom: 20px;">
                     Coaching themes mapped to the 5 fundamental pillars of customer service excellence
                 </p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
     """
     
     # Calculate 5C scores per agent
@@ -1209,19 +1209,19 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         max_score = max([score for _, score in top_agents]) if top_agents else 1
         
         html += f"""
-                    <div style="background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); transition: all 0.3s ease;">
-                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
-                            <div style="font-size: 3rem;">{icon}</div>
+                    <div style="background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.3s ease;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
+                            <div style="font-size: 2rem;">{icon}</div>
                             <div>
-                                <h3 style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
-                                <p style="font-size: 0.9rem; color: #666; margin: 5px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
+                                <h3 style="font-size: 1.1rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
+                                <p style="font-size: 0.8rem; color: #666; margin: 3px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
                             </div>
                         </div>
         """
         
         if top_agents:
             html += """
-                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
             """
             
             for idx, (agent, score) in enumerate(top_agents, 1):
@@ -1237,21 +1237,21 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 
                 themes_text = ', '.join(relevant_themes[:2])
                 if len(relevant_themes) > 2:
-                    themes_text += f" +{len(relevant_themes) - 2} more"
+                    themes_text += f" +{len(relevant_themes) - 2}"
                 
                 html += f"""
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 12px;">
-                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-weight: 700; color: #333; font-size: 1.1rem;">{idx}.</span>
-                                        <span style="font-weight: 600; color: #333;">{agent}</span>
+                            <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-weight: 700; color: #333; font-size: 0.9rem;">{idx}.</span>
+                                        <span style="font-weight: 600; color: #333; font-size: 0.9rem;">{agent}</span>
                                     </div>
-                                    <span style="font-size: 0.85rem; color: #666; font-weight: 600;">Score: {score}</span>
+                                    <span style="font-size: 0.75rem; color: #666; font-weight: 600;">Score: {score}</span>
                                 </div>
-                                <div style="background: #e0e0e0; height: 8px; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
-                                    <div style="background: {color}; height: 100%; width: {percentage}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                                <div style="background: #e0e0e0; height: 6px; border-radius: 8px; overflow: hidden; margin-bottom: 6px;">
+                                    <div style="background: {color}; height: 100%; width: {percentage}%; border-radius: 8px; transition: width 0.5s ease;"></div>
                                 </div>
-                                <div style="font-size: 0.8rem; color: #666; font-style: italic;">{themes_text}</div>
+                                <div style="font-size: 0.75rem; color: #666; font-style: italic;">{themes_text}</div>
                             </div>
                 """
             
@@ -1260,9 +1260,9 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             """
         else:
             html += """
-                        <div style="text-align: center; padding: 30px; color: #999;">
-                            <p style="font-size: 1.1rem;">✨ Great job!</p>
-                            <p style="font-size: 0.9rem;">No major issues in this area</p>
+                        <div style="text-align: center; padding: 20px; color: #999;">
+                            <p style="font-size: 0.95rem; margin: 0;">✨ Great job!</p>
+                            <p style="font-size: 0.8rem; margin: 5px 0 0 0;">No major issues</p>
                         </div>
             """
         
@@ -1799,7 +1799,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2153,31 +2153,38 @@ with tab2:
                             if not insights or len(insights) == 0:
                                 log_area.error("⚠️ No insights generated. The LLM may have failed.")
                                 
-                                # Show retry option with model selector
+                                # Simple retry button - uses model from sidebar
                                 st.markdown("---")
-                                st.markdown("### 🔄 Retry with Different Model")
-                                st.warning("The selected model may be experiencing issues. Try a different model:")
-                                
-                                retry_col1, retry_col2 = st.columns([3, 1])
-                                with retry_col1:
-                                    retry_model = st.selectbox(
-                                        "Select alternative model:",
-                                        options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
-                                        format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
-                                        key="retry_model_selector"
-                                    )
-                                    st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
-                                
-                                with retry_col2:
-                                    if st.button("🔄 Retry Analysis", use_container_width=True, type="primary"):
-                                        # Update model and clear processed state
-                                        st.session_state.analysis_model = retry_model
-                                        st.session_state.processed = False
-                                        st.session_state.coaching_insights = {}
-                                        st.rerun()
+                                if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary"):
+                                    st.session_state.processed = False
+                                    st.session_state.coaching_insights = {}
+                                    st.rerun()
                                 
                             else:
                                 status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
+                                
+                                # Save insights to DuckDB for caching and chat context
+                                conn = st.session_state.duckdb_conn
+                                cache_rows = []
+                                for agent_name, agent_data in insights.items():
+                                    for theme in agent_data.get('coaching_themes', []):
+                                        cache_rows.append({
+                                            'agent': agent_name,
+                                            'theme': theme.get('theme', ''),
+                                            'priority': theme.get('priority', 'low'),
+                                            'frequency': theme.get('frequency', 1),
+                                            'examples': str(theme.get('examples', [])),
+                                            'recommendation': theme.get('recommendation', ''),
+                                            'processed_at': datetime.now().isoformat(),
+                                            'model_used': st.session_state.get('analysis_model', 'unknown')
+                                        })
+                                
+                                if cache_rows:
+                                    cache_df = pd.DataFrame(cache_rows)
+                                    conn.execute("DROP TABLE IF EXISTS coaching_cache")
+                                    conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
+                                    st.success(f"💾 Cached {len(cache_rows)} coaching insights for future queries")
+                                
                                 st.session_state.coaching_insights = insights
                                 st.session_state.processed = True
                                 time.sleep(1)
@@ -2188,27 +2195,12 @@ with tab2:
                             import traceback
                             log_area.code(traceback.format_exc())
                             
-                            # Show retry option
+                            # Simple retry button
                             st.markdown("---")
-                            st.markdown("### 🔄 Retry with Different Model")
-                            st.warning("An error occurred. Try a different model:")
-                            
-                            retry_col1, retry_col2 = st.columns([3, 1])
-                            with retry_col1:
-                                retry_model = st.selectbox(
-                                    "Select alternative model:",
-                                    options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
-                                    format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
-                                    key="retry_model_selector_error"
-                                )
-                                st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
-                            
-                            with retry_col2:
-                                if st.button("🔄 Retry Analysis", use_container_width=True, type="primary", key="retry_btn_error"):
-                                    st.session_state.analysis_model = retry_model
-                                    st.session_state.processed = False
-                                    st.session_state.coaching_insights = {}
-                                    st.rerun()
+                            if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary", key="retry_error"):
+                                st.session_state.processed = False
+                                st.session_state.coaching_insights = {}
+                                st.rerun()
                         finally:
                             loop.close()
         
@@ -2272,6 +2264,49 @@ with tab3:
             
             # Simple query routing
             question_lower = user_question.lower()
+            
+            # Check coaching cache first
+            try:
+                conn = st.session_state.duckdb_conn
+                has_coaching = conn.execute("SELECT COUNT(*) FROM coaching_cache").fetchone()[0] > 0
+                
+                if has_coaching and any(kw in question_lower for kw in ['coaching', 'theme', 'improve', 'recommendation']):
+                    # Coaching-specific queries
+                    if 'top' in question_lower and 'theme' in question_lower:
+                        result = conn.execute("""
+                            SELECT theme, COUNT(*) as count 
+                            FROM coaching_cache 
+                            GROUP BY theme 
+                            ORDER BY count DESC 
+                            LIMIT 5
+                        """).fetchdf()
+                        themes_list = "\n".join([f"- {row['theme']}: {row['count']} agents" for _, row in result.iterrows()])
+                        answer = f"**Top coaching themes:**\n{themes_list}"
+                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                        st.rerun()
+                    
+                    # Check if agent name is in question
+                    for agent in insights.keys():
+                        if agent.lower() in question_lower:
+                            result = conn.execute(f"""
+                                SELECT theme, priority, recommendation 
+                                FROM coaching_cache 
+                                WHERE agent = '{agent}' 
+                                ORDER BY 
+                                    CASE priority 
+                                        WHEN 'high' THEN 1 
+                                        WHEN 'medium' THEN 2 
+                                        ELSE 3 
+                                    END
+                                LIMIT 3
+                            """).fetchdf()
+                            themes = "\n".join([f"- **{row['theme']}** ({row['priority']} priority): {row['recommendation']}" 
+                                               for _, row in result.iterrows()])
+                            answer = f"**Coaching needs for {agent}:**\n{themes}"
+                            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                            st.rerun()
+            except:
+                pass
             
             # Check if it's a SQL-like question
             if any(kw in question_lower for kw in ['how many', 'count', 'average', 'total', 'list all']):
