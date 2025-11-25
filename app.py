@@ -403,13 +403,13 @@ THEME_TO_5C = {
     ]
 }
 
-# 5C Icons
+# 5C Icons - SVG paths for each pillar
 FIVE_C_ICONS = {
-    "Connection": "🤝",
-    "Clarity": "💬",
-    "Commitment": "✅",
-    "Challenge": "💪",
-    "Change": "🔄"
+    "Connection": '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+    "Clarity": '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+    "Commitment": '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>',
+    "Challenge": '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>',
+    "Change": '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>'
 }
 
 # 5C Colors
@@ -1028,30 +1028,28 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             }}
             
             body {{
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 40px;
+                background: #ffffff;
+                padding: 40px 20px;
                 min-height: 100vh;
             }}
             
             .container {{
-                max-width: 1400px;
+                max-width: 1200px;
                 margin: 0 auto;
                 background: white;
-                border-radius: 30px;
-                padding: 50px;
-                box-shadow: 0 30px 60px rgba(0,0,0,0.3);
+                padding: 40px;
             }}
             
             .header {{
                 text-align: center;
                 margin-bottom: 50px;
                 padding-bottom: 30px;
-                border-bottom: 2px solid #e2e8f0;
+                border-bottom: 1px solid #e2e8f0;
             }}
             
             h1 {{
-                font-size: 2.5rem;
-                font-weight: 700;
+                font-size: 2.25rem;
+                font-weight: 600;
                 color: #1e293b;
                 margin-bottom: 10px;
             }}
@@ -1369,7 +1367,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         html += f"""
                     <div style="background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.3s ease;">
                         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid {color};">
-                            <div style="font-size: 2rem;">{icon}</div>
+                            <div>{icon}</div>
                             <div>
                                 <h3 style="font-size: 1.1rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
                                 <p style="font-size: 0.8rem; color: #666; margin: 3px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
@@ -1446,22 +1444,22 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     
     # Prepare theme data with icons
     theme_icons = {
-        "Active Listening": "👂",
-        "Empathy": "❤️",
-        "Communication": "💬",
-        "Professional": "👔",
-        "Resolution": "✅",
-        "Problem": "🔍",
-        "Solution": "💡",
-        "Response Time": "⏱️",
-        "Process": "📋",
-        "Escalation": "⬆️",
-        "Proactive": "🎯",
-        "Expectations": "📊",
-        "Difficult": "😤",
-        "Rapport": "🤝",
-        "Knowledge": "📚",
-        "Confidence": "💪"
+        "Active Listening": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="1"/><path d="M12 1v6m0 6v6m-6-6h6m6 0h6"/></svg>',
+        "Empathy": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+        "Communication": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+        "Professional": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+        "Resolution": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+        "Problem": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
+        "Solution": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4m-5-4 3 3 3-3m-3-10v12"/></svg>',
+        "Response Time": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+        "Process": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        "Escalation": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>',
+        "Proactive": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
+        "Expectations": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+        "Difficult": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        "Rapport": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+        "Knowledge": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+        "Confidence": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
     }
     
     theme_counts = {}
@@ -1475,25 +1473,25 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     
     for theme_name, count in sorted_themes:
         # Find matching icon
-        icon = "🎯"
-        for key, emoji in theme_icons.items():
+        icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>'
+        for key, svg_icon in theme_icons.items():
             if key.lower() in theme_name.lower():
-                icon = emoji
+                icon = svg_icon
                 break
         
         percentage = (count / max_count) * 100
         
         html += f"""
-                    <div style="background: white; border-radius: 20px; padding: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); transition: all 0.3s ease; border-left: 5px solid #667eea;">
-                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                            <div style="font-size: 2.5rem;">{icon}</div>
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; transition: all 0.3s ease;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                            <div>{icon}</div>
                             <div style="flex: 1;">
-                                <div style="font-weight: 700; font-size: 1.1rem; color: #333; margin-bottom: 5px;">{theme_name}</div>
-                                <div style="font-size: 0.9rem; color: #666;">Frequency: {count} agents</div>
+                                <div style="font-weight: 600; font-size: 1rem; color: #1e293b; margin-bottom: 4px;">{theme_name}</div>
+                                <div style="font-size: 0.85rem; color: #64748b;">{count} agents</div>
                             </div>
                         </div>
-                        <div style="background: #f0f0f0; height: 12px; border-radius: 10px; overflow: hidden;">
-                            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; width: {percentage}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                        <div style="background: #f1f5f9; height: 8px; border-radius: 6px; overflow: hidden;">
+                            <div style="background: #0ea5e9; height: 100%; width: {percentage}%; border-radius: 6px; transition: width 0.5s ease;"></div>
                         </div>
                     </div>
         """
@@ -1547,11 +1545,11 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                     <div style="overflow-x: auto;">
                         <table style="width: 100%; border-collapse: separate; border-spacing: 0 12px;">
                             <thead>
-                                <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem; border-radius: 10px 0 0 10px;">👤 Agent</th>
-                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem;">📊 Calls</th>
-                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem;">🎯 Top Area of Improvement</th>
-                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem; border-radius: 0 10px 10px 0;">📈 Priority</th>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 15px; text-align: left; color: #475569; font-weight: 600; font-size: 0.85rem; border-radius: 8px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">Agent</th>
+                                    <th style="padding: 15px; text-align: left; color: #475569; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Calls</th>
+                                    <th style="padding: 15px; text-align: left; color: #475569; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Top Improvement Area</th>
+                                    <th style="padding: 15px; text-align: left; color: #475569; font-weight: 600; font-size: 0.85rem; border-radius: 0 8px 0 0; text-transform: uppercase; letter-spacing: 0.5px;">Priority</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1567,10 +1565,10 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 priority = top_theme.get('priority', 'low')
                 
                 # Get icon for theme
-                icon = "🎯"
-                for key, emoji in theme_icons.items():
+                icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>'
+                for key, svg_icon in theme_icons.items():
                     if key.lower() in theme_name.lower():
-                        icon = emoji
+                        icon = svg_icon
                         break
                 
                 # Priority colors
@@ -1595,14 +1593,14 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                                         </div>
                                     </td>
                                     <td style="padding: 15px;">
-                                        <div style="display: inline-block; background: #f0f0f0; padding: 6px 14px; border-radius: 15px; font-weight: 600; color: #666; font-size: 0.85rem;">
+                                        <div style="display: inline-block; background: #f1f5f9; padding: 6px 14px; border-radius: 15px; font-weight: 600; color: #475569; font-size: 0.85rem;">
                                             {calls} calls
                                         </div>
                                     </td>
                                     <td style="padding: 15px;">
-                                        <div style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); padding: 8px 16px; border-radius: 20px; border: 2px solid #667eea30;">
-                                            <span style="font-size: 1.2rem;">{icon}</span>
-                                            <span style="font-weight: 600; color: #333; font-size: 0.9rem;">{theme_name}</span>
+                                        <div style="display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; padding: 8px 16px; border-radius: 16px; border: 1px solid #e2e8f0;">
+                                            <span>{icon}</span>
+                                            <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">{theme_name}</span>
                                         </div>
                                     </td>
                                     <td style="padding: 15px; border-radius: 0 10px 10px 0;">
@@ -1711,16 +1709,22 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         html += f"""
                 <div class="agent-card">
                     <div style="position: relative;">
-                        <a href="{mailto_link}" title="Share via email" style="position: absolute; top: 15px; right: 15px; width: 36px; height: 36px; background: #0ea5e9; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3); z-index: 10;" 
-                           onmouseover="this.style.background='#0284c7'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(14, 165, 233, 0.5)';" 
-                           onmouseout="this.style.background='#0ea5e9'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 8px rgba(14, 165, 233, 0.3)';">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <a href="{mailto_link}" title="Share via email" style="position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10;" 
+                           onmouseover="this.style.borderColor='#0ea5e9'; this.style.boxShadow='0 2px 6px rgba(14, 165, 233, 0.3)';" 
+                           onmouseout="this.style.borderColor='#e2e8f0'; this.style.boxShadow='0 1px 3px rgba(0,0,0,0.1)';">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                                 <polyline points="22,6 12,13 2,6"></polyline>
                             </svg>
                         </a>
                         <div class="agent-header">
-                            <div class="agent-name">👤 {agent_name}</div>
+                            <div class="agent-name">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                                {agent_name}
+                            </div>
                             <div class="agent-stats">
                                 <div class="stat-badge">{calls_analyzed} calls</div>
                                 <div class="stat-badge">{len(themes)} themes</div>
@@ -2072,7 +2076,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0ea5e9;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #1e293b;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2871,5 +2875,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE Innovations Lab 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
