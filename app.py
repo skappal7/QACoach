@@ -457,6 +457,61 @@ class RateLimiter:
             self.tokens = 0
             self.last_update = time.time()
 
+def parse_transcript_chunk(chunk_data):
+    """Parse a chunk of transcripts - used for multiprocessing"""
+    results = []
+    for row_data in chunk_data:
+        call_id, agent_name, transcript_text, sentiment = row_data
+        turns = parse_multiline_transcript(str(transcript_text))
+        
+        for turn in turns:
+            results.append({
+                'call_id': call_id,
+                'agent': agent_name,
+                'timestamp': turn['timestamp'],
+                'speaker': turn['speaker'],
+                'message': turn['message'],
+                'sentiment_score': sentiment,
+                'original_transcript': transcript_text
+            })
+    
+    return results
+
+def parse_transcripts_parallel(df, call_id_col, agent_col, transcript_col, sentiment_col, num_workers=None):
+    """Parse transcripts in parallel using multiprocessing"""
+    from multiprocessing import Pool, cpu_count
+    import numpy as np
+    
+    if num_workers is None:
+        num_workers = max(1, cpu_count() - 1)  # Leave 1 core free
+    
+    # Prepare data
+    chunk_data = []
+    for idx, row in df.iterrows():
+        call_id = row[call_id_col]
+        agent_name = row[agent_col]
+        transcript_text = row[transcript_col]
+        sentiment = None
+        if sentiment_col and sentiment_col != "None":
+            sentiment = row.get(sentiment_col)
+        
+        chunk_data.append((call_id, agent_name, transcript_text, sentiment))
+    
+    # Split into chunks for parallel processing
+    chunk_size = max(100, len(chunk_data) // (num_workers * 4))  # 4 chunks per worker
+    chunks = [chunk_data[i:i + chunk_size] for i in range(0, len(chunk_data), chunk_size)]
+    
+    # Process in parallel
+    with Pool(processes=num_workers) as pool:
+        results = pool.map(parse_transcript_chunk, chunks)
+    
+    # Flatten results
+    expanded_rows = []
+    for chunk_result in results:
+        expanded_rows.extend(chunk_result)
+    
+    return expanded_rows
+
 def redact_pii(text: str) -> str:
     """Redact PII from text"""
     # Email
@@ -478,6 +533,12 @@ def normalize_speaker(speaker: str) -> str:
         return 'customer'
     return speaker_lower
 
+# Compile regex patterns once for performance
+BRACKET_PATTERN = re.compile(r'\[([\d:]+)\s+([^\]]+)\]:\s*\n?\s*(.*?)(?=\[[\d:]+\s+[^\]]+\]:|$)', re.DOTALL)
+PIPE_PATTERN = re.compile(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+([^:]+):\s*(.*)')
+HTML_BR_PATTERN = re.compile(r'<br\s*/?>', re.IGNORECASE)
+HTML_TAG_PATTERN = re.compile(r'<[^>]+>')
+
 def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
     """Parse multiline transcript from single cell into conversation turns
     
@@ -486,14 +547,10 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
     2. Bracket inline: "[12:30:08 AGENT]: message"
     3. Pipe-separated: "2025-02-07 13:17:57 +0000 Consumer: Hi! | 2025-02-07 13:18:01 +0000 Agent: Hello"
     """
+    if not transcript_text or not isinstance(transcript_text, str):
+        return []
+    
     turns = []
-    
-    # Pattern for bracket format with optional newline: "[12:30:08 AGENT]:\n message" or "[12:30:08 AGENT]: message"
-    # Using re.DOTALL to match across newlines
-    bracket_pattern = r'\[([\d:]+)\s+([^\]]+)\]:\s*\n?\s*(.*?)(?=\[[\d:]+\s+[^\]]+\]:|$)'
-    
-    # Pattern for pipe format: "2025-02-07 13:17:57 +0000 Consumer: message"
-    pipe_pattern = r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+([^:]+):\s*(.*)'
     
     # Check if pipe-separated format
     if '|' in transcript_text:
@@ -502,27 +559,28 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
             segment = segment.strip()
             if not segment:
                 continue
-            match = re.match(pipe_pattern, segment)
+            match = PIPE_PATTERN.match(segment)
             if match:
                 timestamp, speaker, message = match.groups()
                 # Clean HTML tags
-                message = re.sub(r'<br\s*/?>', ' ', message)  # Replace <br> with space
-                message = re.sub(r'<[^>]+>', '', message)  # Remove all other HTML tags
-                message = ' '.join(message.split())  # Normalize whitespace
-                turns.append({
-                    'timestamp': timestamp,
-                    'speaker': normalize_speaker(speaker.strip()),
-                    'message': redact_pii(message.strip())
-                })
+                message = HTML_BR_PATTERN.sub(' ', message)
+                message = HTML_TAG_PATTERN.sub('', message)
+                message = ' '.join(message.split())
+                if message:
+                    turns.append({
+                        'timestamp': timestamp,
+                        'speaker': normalize_speaker(speaker.strip()),
+                        'message': redact_pii(message.strip())
+                    })
     else:
-        # Try bracket format with regex findall (handles newlines)
-        matches = re.findall(bracket_pattern, transcript_text, re.DOTALL)
+        # Try bracket format
+        matches = BRACKET_PATTERN.findall(transcript_text)
         for match in matches:
             timestamp, speaker, message = match
-            # Clean up message (remove extra whitespace/newlines and HTML tags)
-            message = re.sub(r'<br\s*/?>', ' ', message)  # Replace <br> with space
-            message = re.sub(r'<[^>]+>', '', message)  # Remove all other HTML tags
-            message = ' '.join(message.split())  # Normalize whitespace
+            # Clean HTML tags
+            message = HTML_BR_PATTERN.sub(' ', message)
+            message = HTML_TAG_PATTERN.sub('', message)
+            message = ' '.join(message.split())
             if message:
                 turns.append({
                     'timestamp': timestamp.strip(),
@@ -1899,48 +1957,28 @@ with tab1:
                         'custom': custom_cols
                     }
                     
-                    # Parse transcripts and expand
-                    expanded_rows = []
-                    parse_failures = []
+                    # Show progress
+                    progress_text = st.empty()
+                    progress_bar = st.progress(0.0)
                     
-                    for idx, row in df.iterrows():
-                        call_id = row[call_id_col]
-                        agent_name = row[agent_col]
-                        transcript_text = row[transcript_col]
-                        
-                        # Handle sentiment safely
-                        sentiment = None
-                        if sentiment_col and sentiment_col != "None":
-                            sentiment = row.get(sentiment_col)
-                        
-                        # Parse transcript
-                        turns = parse_multiline_transcript(str(transcript_text))
-                        
-                        if not turns:
-                            parse_failures.append({
-                                'call_id': call_id,
-                                'agent': agent_name,
-                                'transcript_preview': str(transcript_text)[:200]
-                            })
-                            continue
-                        
-                        for turn in turns:
-                            expanded_rows.append({
-                                'call_id': call_id,
-                                'agent': agent_name,
-                                'timestamp': turn['timestamp'],
-                                'speaker': turn['speaker'],
-                                'message': turn['message'],
-                                'sentiment_score': sentiment,
-                                'original_transcript': transcript_text
-                            })
+                    progress_text.text("📝 Parsing transcripts in parallel...")
+                    progress_bar.progress(0.2)
                     
-                    if parse_failures:
-                        st.warning(f"⚠️ Failed to parse {len(parse_failures)} transcripts. Check format.")
-                        with st.expander("Show failed transcripts"):
-                            st.write(pd.DataFrame(parse_failures))
+                    # Parse transcripts using multiprocessing
+                    from multiprocessing import cpu_count
+                    num_cores = cpu_count()
+                    st.info(f"🚀 Using {num_cores - 1} CPU cores for parallel processing")
+                    
+                    expanded_rows = parse_transcripts_parallel(
+                        df, call_id_col, agent_col, transcript_col, sentiment_col
+                    )
+                    
+                    progress_bar.progress(0.6)
+                    progress_text.text("💾 Loading into DuckDB...")
                     
                     if not expanded_rows:
+                        progress_text.empty()
+                        progress_bar.empty()
                         st.error("❌ No transcripts could be parsed. Please check your data format.")
                         st.info("Expected formats:\n- `[12:30:08 AGENT]: message`\n- `2025-02-07 13:17:57 +0000 Agent: message | 2025-02-07 13:18:01 +0000 Customer: response`")
                         st.stop()
@@ -1953,6 +1991,9 @@ with tab1:
                     # Reload into DuckDB using direct DataFrame reference
                     conn.execute("DROP TABLE IF EXISTS transcripts")
                     conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
+                    
+                    progress_bar.progress(0.8)
+                    progress_text.text("📊 Running analytics...")
                     
                     # Run DuckDB analytics
                     analytics = {}
@@ -2013,10 +2054,19 @@ with tab1:
                     """).fetchdf()
                     analytics['flow_stats'] = flow_stats
                     
+                    progress_bar.progress(1.0)
+                    progress_text.text("✅ Complete!")
+                    
                     st.session_state.pre_analytics = analytics
                     st.session_state.pre_analysis_done = True
                     
-                    st.success("✅ Pre-analysis complete!")
+                    # Clear progress indicators
+                    import time
+                    time.sleep(0.5)
+                    progress_text.empty()
+                    progress_bar.empty()
+                    
+                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_cores - 1} CPU cores.")
                     st.rerun()
         else:
             st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
