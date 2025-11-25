@@ -396,54 +396,26 @@ def convert_to_parquet(df: pd.DataFrame, filename: str) -> bytes:
     return buf.getvalue()
 
 def load_file_to_dataframe(uploaded_file) -> pd.DataFrame:
-    """Load various file formats to dataframe and parse multiline transcripts"""
+    """Load various file formats to raw dataframe (no parsing)"""
     file_ext = uploaded_file.name.split('.')[-1].lower()
     
     if file_ext == 'csv':
-        raw_df = pd.read_csv(uploaded_file)
+        return pd.read_csv(uploaded_file)
     elif file_ext in ['xlsx', 'xls']:
-        raw_df = pd.read_excel(uploaded_file)
-    elif file_ext == 'txt':
-        # For TXT, assume entire file is one conversation
-        content = uploaded_file.read().decode('utf-8')
-        turns = parse_multiline_transcript(content)
-        return pd.DataFrame(turns)
+        return pd.read_excel(uploaded_file)
     elif file_ext == 'parquet':
         return pd.read_parquet(uploaded_file)
+    elif file_ext == 'txt':
+        # For TXT, create simple dataframe
+        content = uploaded_file.read().decode('utf-8')
+        return pd.DataFrame([{
+            'call_id': 'CALL_0001',
+            'agent': 'Unknown',
+            'transcript': content
+        }])
     else:
         st.error(f"Unsupported file format: {file_ext}")
         return None
-    
-    # Now parse the transcript column into individual turns
-    # Expected columns: call_id, agent (optional), transcript, sentiment_score (optional)
-    
-    if 'transcript' not in raw_df.columns:
-        st.error("CSV/Excel must have a 'transcript' column with the conversation")
-        return None
-    
-    expanded_rows = []
-    
-    for idx, row in raw_df.iterrows():
-        call_id = row.get('call_id', f'CALL_{idx:04d}')
-        agent_name = row.get('agent', 'Unknown')
-        transcript_text = row.get('transcript', '')
-        sentiment_score = row.get('sentiment_score', None)
-        
-        # Parse the multiline transcript
-        turns = parse_multiline_transcript(str(transcript_text))
-        
-        # Add metadata to each turn
-        for turn in turns:
-            expanded_rows.append({
-                'call_id': call_id,
-                'agent': agent_name,
-                'timestamp': turn['timestamp'],
-                'speaker': turn['speaker'],
-                'message': turn['message'],
-                'sentiment_score': sentiment_score
-            })
-    
-    return pd.DataFrame(expanded_rows)
 
 async def call_llm_async(
     session: aiohttp.ClientSession,
