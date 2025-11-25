@@ -1526,7 +1526,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
