@@ -457,6 +457,70 @@ class RateLimiter:
             self.tokens = 0
             self.last_update = time.time()
 
+def parse_transcript_chunk(chunk_data):
+    """Parse a chunk of transcripts - used for multiprocessing"""
+    results = []
+    for row_data in chunk_data:
+        call_id, agent_name, transcript_text, sentiment = row_data
+        turns = parse_multiline_transcript(str(transcript_text))
+        
+        for turn in turns:
+            results.append({
+                'call_id': call_id,
+                'agent': agent_name,
+                'timestamp': turn['timestamp'],
+                'speaker': turn['speaker'],
+                'message': turn['message'],
+                'sentiment_score': sentiment,
+                'original_transcript': transcript_text
+            })
+    
+    return results
+
+def parse_transcripts_parallel(df, call_id_col, agent_col, transcript_col, sentiment_col, num_workers=None):
+    """Parse transcripts in parallel using concurrent.futures (Streamlit Cloud compatible)"""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from multiprocessing import cpu_count
+    import os
+    
+    if num_workers is None:
+        num_workers = max(1, cpu_count() - 1)
+    
+    # Prepare data
+    chunk_data = []
+    for idx, row in df.iterrows():
+        call_id = row[call_id_col]
+        agent_name = row[agent_col]
+        transcript_text = row[transcript_col]
+        sentiment = None
+        if sentiment_col and sentiment_col != "None":
+            sentiment = row.get(sentiment_col)
+        
+        chunk_data.append((call_id, agent_name, transcript_text, sentiment))
+    
+    # Split into chunks
+    chunk_size = max(50, len(chunk_data) // (num_workers * 8))  # Smaller chunks for responsiveness
+    chunks = [chunk_data[i:i + chunk_size] for i in range(0, len(chunk_data), chunk_size)]
+    
+    # Process in parallel with progress updates
+    expanded_rows = []
+    
+    # Use ProcessPoolExecutor with spawn context for Streamlit Cloud
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all chunks
+        future_to_chunk = {executor.submit(parse_transcript_chunk, chunk): i for i, chunk in enumerate(chunks)}
+        
+        # Process results as they complete (allows yielding control)
+        for future in as_completed(future_to_chunk):
+            try:
+                chunk_result = future.result(timeout=30)  # 30s timeout per chunk
+                expanded_rows.extend(chunk_result)
+            except Exception as e:
+                print(f"Chunk processing error: {str(e)}")
+                continue
+    
+    return expanded_rows
+
 def redact_pii(text: str) -> str:
     """Redact PII from text"""
     # Email
@@ -478,6 +542,12 @@ def normalize_speaker(speaker: str) -> str:
         return 'customer'
     return speaker_lower
 
+# Compile regex patterns once for performance
+BRACKET_PATTERN = re.compile(r'\[([\d:]+)\s+([^\]]+)\]:\s*\n?\s*(.*?)(?=\[[\d:]+\s+[^\]]+\]:|$)', re.DOTALL)
+PIPE_PATTERN = re.compile(r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+([^:]+):\s*(.*)')
+HTML_BR_PATTERN = re.compile(r'<br\s*/?>', re.IGNORECASE)
+HTML_TAG_PATTERN = re.compile(r'<[^>]+>')
+
 def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
     """Parse multiline transcript from single cell into conversation turns
     
@@ -486,14 +556,10 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
     2. Bracket inline: "[12:30:08 AGENT]: message"
     3. Pipe-separated: "2025-02-07 13:17:57 +0000 Consumer: Hi! | 2025-02-07 13:18:01 +0000 Agent: Hello"
     """
+    if not transcript_text or not isinstance(transcript_text, str):
+        return []
+    
     turns = []
-    
-    # Pattern for bracket format with optional newline: "[12:30:08 AGENT]:\n message" or "[12:30:08 AGENT]: message"
-    # Using re.DOTALL to match across newlines
-    bracket_pattern = r'\[([\d:]+)\s+([^\]]+)\]:\s*\n?\s*(.*?)(?=\[[\d:]+\s+[^\]]+\]:|$)'
-    
-    # Pattern for pipe format: "2025-02-07 13:17:57 +0000 Consumer: message"
-    pipe_pattern = r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4})\s+([^:]+):\s*(.*)'
     
     # Check if pipe-separated format
     if '|' in transcript_text:
@@ -502,20 +568,27 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
             segment = segment.strip()
             if not segment:
                 continue
-            match = re.match(pipe_pattern, segment)
+            match = PIPE_PATTERN.match(segment)
             if match:
                 timestamp, speaker, message = match.groups()
-                turns.append({
-                    'timestamp': timestamp,
-                    'speaker': normalize_speaker(speaker.strip()),
-                    'message': redact_pii(message.strip())
-                })
+                # Clean HTML tags
+                message = HTML_BR_PATTERN.sub(' ', message)
+                message = HTML_TAG_PATTERN.sub('', message)
+                message = ' '.join(message.split())
+                if message:
+                    turns.append({
+                        'timestamp': timestamp,
+                        'speaker': normalize_speaker(speaker.strip()),
+                        'message': redact_pii(message.strip())
+                    })
     else:
-        # Try bracket format with regex findall (handles newlines)
-        matches = re.findall(bracket_pattern, transcript_text, re.DOTALL)
+        # Try bracket format
+        matches = BRACKET_PATTERN.findall(transcript_text)
         for match in matches:
             timestamp, speaker, message = match
-            # Clean up message (remove extra whitespace/newlines)
+            # Clean HTML tags
+            message = HTML_BR_PATTERN.sub(' ', message)
+            message = HTML_TAG_PATTERN.sub('', message)
             message = ' '.join(message.split())
             if message:
                 turns.append({
@@ -730,8 +803,8 @@ async def process_agent_batch_async(
     
     async with semaphore:
         try:
-            # Get unique call IDs for this agent (limit to 5-7 calls max)
-            unique_calls = calls_df['call_id'].unique()[:7]  # Reduced to 7 calls max
+            # Get unique call IDs for this agent (already filtered to 4-5 calls by caller)
+            unique_calls = calls_df['call_id'].unique()
             
             # Create compressed context
             call_summaries = []
@@ -926,34 +999,34 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             
             .metrics-grid {{
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 30px;
-                margin-bottom: 50px;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 30px;
             }}
             
             .metric-card {{
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 30px;
-                border-radius: 20px;
+                padding: 20px;
+                border-radius: 15px;
                 color: white;
-                box-shadow: 0 10px 30px rgba(102,126,234,0.3);
+                box-shadow: 0 4px 12px rgba(102,126,234,0.2);
                 transition: transform 0.3s ease;
             }}
             
             .metric-card:hover {{
-                transform: translateY(-5px);
+                transform: translateY(-3px);
             }}
             
             .metric-label {{
-                font-size: 0.9rem;
+                font-size: 0.85rem;
                 opacity: 0.9;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
                 text-transform: uppercase;
                 letter-spacing: 1px;
             }}
             
             .metric-value {{
-                font-size: 3rem;
+                font-size: 2rem;
                 font-weight: 700;
             }}
             
@@ -1171,11 +1244,11 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <h2 class="section-title">📊 5C Coaching Framework Analysis</h2>
-            <div style="margin: 30px 0; padding: 30px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 20px;">
-                <p style="font-size: 1.1rem; color: #666; text-align: center; margin-bottom: 40px;">
+            <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 15px;">
+                <p style="font-size: 0.95rem; color: #666; text-align: center; margin-bottom: 20px;">
                     Coaching themes mapped to the 5 fundamental pillars of customer service excellence
                 </p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
     """
     
     # Calculate 5C scores per agent
@@ -1209,19 +1282,19 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         max_score = max([score for _, score in top_agents]) if top_agents else 1
         
         html += f"""
-                    <div style="background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); transition: all 0.3s ease;">
-                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
-                            <div style="font-size: 3rem;">{icon}</div>
+                    <div style="background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.3s ease;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
+                            <div style="font-size: 2rem;">{icon}</div>
                             <div>
-                                <h3 style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
-                                <p style="font-size: 0.9rem; color: #666; margin: 5px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
+                                <h3 style="font-size: 1.1rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
+                                <p style="font-size: 0.8rem; color: #666; margin: 3px 0 0 0;">{len([a for a, s in top_agents])} agents need support</p>
                             </div>
                         </div>
         """
         
         if top_agents:
             html += """
-                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
             """
             
             for idx, (agent, score) in enumerate(top_agents, 1):
@@ -1237,21 +1310,21 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 
                 themes_text = ', '.join(relevant_themes[:2])
                 if len(relevant_themes) > 2:
-                    themes_text += f" +{len(relevant_themes) - 2} more"
+                    themes_text += f" +{len(relevant_themes) - 2}"
                 
                 html += f"""
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 12px;">
-                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-weight: 700; color: #333; font-size: 1.1rem;">{idx}.</span>
-                                        <span style="font-weight: 600; color: #333;">{agent}</span>
+                            <div style="background: #f8f9fa; padding: 10px; border-radius: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-weight: 700; color: #333; font-size: 0.9rem;">{idx}.</span>
+                                        <span style="font-weight: 600; color: #333; font-size: 0.9rem;">{agent}</span>
                                     </div>
-                                    <span style="font-size: 0.85rem; color: #666; font-weight: 600;">Score: {score}</span>
+                                    <span style="font-size: 0.75rem; color: #666; font-weight: 600;">Score: {score}</span>
                                 </div>
-                                <div style="background: #e0e0e0; height: 8px; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
-                                    <div style="background: {color}; height: 100%; width: {percentage}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                                <div style="background: #e0e0e0; height: 6px; border-radius: 8px; overflow: hidden; margin-bottom: 6px;">
+                                    <div style="background: {color}; height: 100%; width: {percentage}%; border-radius: 8px; transition: width 0.5s ease;"></div>
                                 </div>
-                                <div style="font-size: 0.8rem; color: #666; font-style: italic;">{themes_text}</div>
+                                <div style="font-size: 0.75rem; color: #666; font-style: italic;">{themes_text}</div>
                             </div>
                 """
             
@@ -1260,9 +1333,9 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             """
         else:
             html += """
-                        <div style="text-align: center; padding: 30px; color: #999;">
-                            <p style="font-size: 1.1rem;">✨ Great job!</p>
-                            <p style="font-size: 0.9rem;">No major issues in this area</p>
+                        <div style="text-align: center; padding: 20px; color: #999;">
+                            <p style="font-size: 0.95rem; margin: 0;">✨ Great job!</p>
+                            <p style="font-size: 0.8rem; margin: 5px 0 0 0;">No major issues</p>
                         </div>
             """
         
@@ -1338,101 +1411,182 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <h2 class="section-title">📋 Agent Performance Summary</h2>
-            <div style="overflow-x: auto; margin: 30px 0;">
-                <table style="width: 100%; border-collapse: separate; border-spacing: 0 15px;">
-                    <thead>
-                        <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem; border-radius: 10px 0 0 10px;">👤 Agent</th>
-                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem;">📊 Calls</th>
-                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem;">🎯 Top Area of Improvement</th>
-                            <th style="padding: 20px; text-align: left; color: white; font-weight: 700; font-size: 1.1rem; border-radius: 0 10px 10px 0;">📈 Priority</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <div style="margin: 20px 0;">
     """
     
-    # Add agent rows
+    # Sort agents by priority (high priority themes first)
+    agent_priority = []
     for agent_name, agent_data in insights.items():
         themes = agent_data.get('coaching_themes', [])
-        calls = agent_data.get('calls_analyzed', 0)
+        high_priority = sum(1 for t in themes if t.get('priority') == 'high')
+        medium_priority = sum(1 for t in themes if t.get('priority') == 'medium')
+        agent_priority.append((agent_name, high_priority, medium_priority, agent_data))
+    
+    agent_priority.sort(key=lambda x: (x[1], x[2]), reverse=True)  # Sort by high, then medium
+    
+    total_agents = len(agent_priority)
+    agents_per_page = 20
+    total_pages = (total_agents + agents_per_page - 1) // agents_per_page
+    
+    html += f"""
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                    <p style="margin: 0; color: #666; font-size: 0.95rem;">
+                        <strong>Showing {total_agents} agents</strong> | Sorted by priority | {agents_per_page} per page
+                    </p>
+                </div>
+    """
+    
+    # Generate pagination controls
+    for page in range(total_pages):
+        page_num = page + 1
+        start_idx = page * agents_per_page
+        end_idx = min(start_idx + agents_per_page, total_agents)
         
-        if themes:
-            top_theme = themes[0]
-            theme_name = top_theme.get('theme', 'N/A')
-            priority = top_theme.get('priority', 'low')
+        page_agents = agent_priority[start_idx:end_idx]
+        
+        html += f"""
+                <div id="page-{page_num}" style="display: {'block' if page == 0 else 'none'};">
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: separate; border-spacing: 0 12px;">
+                            <thead>
+                                <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem; border-radius: 10px 0 0 10px;">👤 Agent</th>
+                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem;">📊 Calls</th>
+                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem;">🎯 Top Area of Improvement</th>
+                                    <th style="padding: 15px; text-align: left; color: white; font-weight: 700; font-size: 0.95rem; border-radius: 0 10px 10px 0;">📈 Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        """
+        
+        for agent_name, high_pri, med_pri, agent_data in page_agents:
+            themes = agent_data.get('coaching_themes', [])
+            calls = agent_data.get('calls_analyzed', 0)
             
-            # Get icon for theme
-            icon = "🎯"
-            for key, emoji in theme_icons.items():
-                if key.lower() in theme_name.lower():
-                    icon = emoji
-                    break
-            
-            # Priority colors
-            if priority == 'high':
-                priority_color = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
-                priority_icon = "🔴"
-            elif priority == 'medium':
-                priority_color = "linear-gradient(135deg, #ffd89b 0%, #ffa726 100%)"
-                priority_icon = "🟡"
+            if themes:
+                top_theme = themes[0]
+                theme_name = top_theme.get('theme', 'N/A')
+                priority = top_theme.get('priority', 'low')
+                
+                # Get icon for theme
+                icon = "🎯"
+                for key, emoji in theme_icons.items():
+                    if key.lower() in theme_name.lower():
+                        icon = emoji
+                        break
+                
+                # Priority colors
+                if priority == 'high':
+                    priority_color = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
+                    priority_icon = "🔴"
+                elif priority == 'medium':
+                    priority_color = "linear-gradient(135deg, #ffd89b 0%, #ffa726 100%)"
+                    priority_icon = "🟡"
+                else:
+                    priority_color = "linear-gradient(135deg, #a8edea 0%, #66bb6a 100%)"
+                    priority_icon = "🟢"
+                
+                html += f"""
+                                <tr style="background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: all 0.3s ease;">
+                                    <td style="padding: 15px; font-weight: 700; font-size: 0.95rem; color: #333; border-radius: 10px 0 0 10px;">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
+                                                {agent_name[0].upper()}
+                                            </div>
+                                            {agent_name}
+                                        </div>
+                                    </td>
+                                    <td style="padding: 15px;">
+                                        <div style="display: inline-block; background: #f0f0f0; padding: 6px 14px; border-radius: 15px; font-weight: 600; color: #666; font-size: 0.85rem;">
+                                            {calls} calls
+                                        </div>
+                                    </td>
+                                    <td style="padding: 15px;">
+                                        <div style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); padding: 8px 16px; border-radius: 20px; border: 2px solid #667eea30;">
+                                            <span style="font-size: 1.2rem;">{icon}</span>
+                                            <span style="font-weight: 600; color: #333; font-size: 0.9rem;">{theme_name}</span>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 15px; border-radius: 0 10px 10px 0;">
+                                        <div style="display: inline-flex; align-items: center; gap: 6px; background: {priority_color}; padding: 8px 16px; border-radius: 20px; color: white; font-weight: 700; text-transform: uppercase; font-size: 0.8rem;">
+                                            <span>{priority_icon}</span>
+                                            <span>{priority}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                """
             else:
-                priority_color = "linear-gradient(135deg, #a8edea 0%, #66bb6a 100%)"
-                priority_icon = "🟢"
-            
+                html += f"""
+                                <tr style="background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                                    <td style="padding: 15px; font-weight: 700; font-size: 0.95rem; color: #333; border-radius: 10px 0 0 10px;">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
+                                                {agent_name[0].upper()}
+                                            </div>
+                                            {agent_name}
+                                        </div>
+                                    </td>
+                                    <td style="padding: 15px;">
+                                        <div style="display: inline-block; background: #f0f0f0; padding: 6px 14px; border-radius: 15px; font-weight: 600; color: #666; font-size: 0.85rem;">
+                                            {calls} calls
+                                        </div>
+                                    </td>
+                                    <td style="padding: 15px;" colspan="2">
+                                        <div style="color: #999; font-style: italic; font-size: 0.9rem;">No coaching themes identified</div>
+                                    </td>
+                                </tr>
+                """
+        
+        html += """
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+        """
+    
+    # Add pagination controls
+    if total_pages > 1:
+        html += """
+                <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin: 30px 0;">
+        """
+        
+        for page in range(total_pages):
+            page_num = page + 1
             html += f"""
-                        <tr style="background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: all 0.3s ease;">
-                            <td style="padding: 20px; font-weight: 700; font-size: 1.05rem; color: #333; border-radius: 10px 0 0 10px;">
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <div style="width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
-                                        {agent_name[0].upper()}
-                                    </div>
-                                    {agent_name}
-                                </div>
-                            </td>
-                            <td style="padding: 20px;">
-                                <div style="display: inline-block; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: #666;">
-                                    {calls} calls
-                                </div>
-                            </td>
-                            <td style="padding: 20px;">
-                                <div style="display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); padding: 10px 20px; border-radius: 25px; border: 2px solid #667eea30;">
-                                    <span style="font-size: 1.5rem;">{icon}</span>
-                                    <span style="font-weight: 600; color: #333;">{theme_name}</span>
-                                </div>
-                            </td>
-                            <td style="padding: 20px; border-radius: 0 10px 10px 0;">
-                                <div style="display: inline-flex; align-items: center; gap: 8px; background: {priority_color}; padding: 10px 20px; border-radius: 25px; color: white; font-weight: 700; text-transform: uppercase; font-size: 0.9rem;">
-                                    <span>{priority_icon}</span>
-                                    <span>{priority}</span>
-                                </div>
-                            </td>
-                        </tr>
+                    <button onclick="showPage({page_num})" id="page-btn-{page_num}" style="padding: 10px 16px; border: 2px solid #667eea; background: {'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' if page == 0 else 'white'}; color: {'white' if page == 0 else '#667eea'}; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; font-size: 0.9rem;">
+                        {page_num}
+                    </button>
             """
-        else:
-            html += f"""
-                        <tr style="background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-                            <td style="padding: 20px; font-weight: 700; font-size: 1.05rem; color: #333; border-radius: 10px 0 0 10px;">
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <div style="width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
-                                        {agent_name[0].upper()}
-                                    </div>
-                                    {agent_name}
-                                </div>
-                            </td>
-                            <td style="padding: 20px;">
-                                <div style="display: inline-block; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: #666;">
-                                    {calls} calls
-                                </div>
-                            </td>
-                            <td style="padding: 20px;" colspan="2">
-                                <div style="color: #999; font-style: italic;">No coaching themes identified</div>
-                            </td>
-                        </tr>
-            """
+        
+        html += """
+                </div>
+                
+                <script>
+                function showPage(pageNum) {
+                    // Hide all pages
+                    const pages = document.querySelectorAll('[id^="page-"]');
+                    pages.forEach(page => {
+                        if (page.id.startsWith('page-btn-')) return;
+                        page.style.display = 'none';
+                    });
+                    
+                    // Show selected page
+                    document.getElementById('page-' + pageNum).style.display = 'block';
+                    
+                    // Update button styles
+                    const buttons = document.querySelectorAll('[id^="page-btn-"]');
+                    buttons.forEach(btn => {
+                        btn.style.background = 'white';
+                        btn.style.color = '#667eea';
+                    });
+                    
+                    document.getElementById('page-btn-' + pageNum).style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    document.getElementById('page-btn-' + pageNum).style.color = 'white';
+                }
+                </script>
+        """
     
     html += """
-                    </tbody>
-                </table>
             </div>
             
             <h2 class="section-title">👥 Agent Coaching Details</h2>
@@ -1893,48 +2047,69 @@ with tab1:
                         'custom': custom_cols
                     }
                     
-                    # Parse transcripts and expand
-                    expanded_rows = []
-                    parse_failures = []
+                    # Show progress
+                    progress_text = st.empty()
+                    progress_bar = st.progress(0.0)
                     
+                    progress_text.text("📝 Parsing transcripts in parallel...")
+                    progress_bar.progress(0.2)
+                    
+                    # Parse transcripts using parallel processing
+                    from multiprocessing import cpu_count
+                    from concurrent.futures import ProcessPoolExecutor, as_completed
+                    
+                    num_cores = cpu_count()
+                    num_workers = max(1, num_cores - 1)
+                    st.info(f"🚀 Using {num_workers} CPU cores for parallel processing")
+                    
+                    # Prepare data
+                    chunk_data = []
                     for idx, row in df.iterrows():
                         call_id = row[call_id_col]
                         agent_name = row[agent_col]
                         transcript_text = row[transcript_col]
-                        
-                        # Handle sentiment safely
                         sentiment = None
                         if sentiment_col and sentiment_col != "None":
                             sentiment = row.get(sentiment_col)
                         
-                        # Parse transcript
-                        turns = parse_multiline_transcript(str(transcript_text))
-                        
-                        if not turns:
-                            parse_failures.append({
-                                'call_id': call_id,
-                                'agent': agent_name,
-                                'transcript_preview': str(transcript_text)[:200]
-                            })
-                            continue
-                        
-                        for turn in turns:
-                            expanded_rows.append({
-                                'call_id': call_id,
-                                'agent': agent_name,
-                                'timestamp': turn['timestamp'],
-                                'speaker': turn['speaker'],
-                                'message': turn['message'],
-                                'sentiment_score': sentiment,
-                                'original_transcript': transcript_text
-                            })
+                        chunk_data.append((call_id, agent_name, transcript_text, sentiment))
                     
-                    if parse_failures:
-                        st.warning(f"⚠️ Failed to parse {len(parse_failures)} transcripts. Check format.")
-                        with st.expander("Show failed transcripts"):
-                            st.write(pd.DataFrame(parse_failures))
+                    # Split into chunks
+                    chunk_size = max(50, len(chunk_data) // (num_workers * 8))
+                    chunks = [chunk_data[i:i + chunk_size] for i in range(0, len(chunk_data), chunk_size)]
+                    total_chunks = len(chunks)
+                    
+                    progress_text.text(f"📝 Processing {len(chunk_data):,} transcripts in {total_chunks} chunks...")
+                    
+                    # Process in parallel with incremental progress
+                    expanded_rows = []
+                    completed_chunks = 0
+                    
+                    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                        future_to_chunk = {executor.submit(parse_transcript_chunk, chunk): i for i, chunk in enumerate(chunks)}
+                        
+                        for future in as_completed(future_to_chunk):
+                            try:
+                                chunk_result = future.result(timeout=30)
+                                expanded_rows.extend(chunk_result)
+                                completed_chunks += 1
+                                
+                                # Update progress
+                                progress_pct = 0.2 + (0.4 * completed_chunks / total_chunks)
+                                progress_bar.progress(progress_pct)
+                                progress_text.text(f"📝 Parsed {completed_chunks}/{total_chunks} chunks ({len(expanded_rows):,} turns so far)...")
+                                
+                            except Exception as e:
+                                st.warning(f"⚠️ Chunk processing error: {str(e)}")
+                                completed_chunks += 1
+                                continue
+                    
+                    progress_bar.progress(0.6)
+                    progress_text.text("💾 Loading into DuckDB...")
                     
                     if not expanded_rows:
+                        progress_text.empty()
+                        progress_bar.empty()
                         st.error("❌ No transcripts could be parsed. Please check your data format.")
                         st.info("Expected formats:\n- `[12:30:08 AGENT]: message`\n- `2025-02-07 13:17:57 +0000 Agent: message | 2025-02-07 13:18:01 +0000 Customer: response`")
                         st.stop()
@@ -1947,6 +2122,9 @@ with tab1:
                     # Reload into DuckDB using direct DataFrame reference
                     conn.execute("DROP TABLE IF EXISTS transcripts")
                     conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
+                    
+                    progress_bar.progress(0.8)
+                    progress_text.text("📊 Running analytics...")
                     
                     # Run DuckDB analytics
                     analytics = {}
@@ -2007,10 +2185,19 @@ with tab1:
                     """).fetchdf()
                     analytics['flow_stats'] = flow_stats
                     
+                    progress_bar.progress(1.0)
+                    progress_text.text("✅ Complete!")
+                    
                     st.session_state.pre_analytics = analytics
                     st.session_state.pre_analysis_done = True
                     
-                    st.success("✅ Pre-analysis complete!")
+                    # Clear progress indicators
+                    import time
+                    time.sleep(0.5)
+                    progress_text.empty()
+                    progress_bar.empty()
+                    
+                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_workers} CPU cores.")
                     st.rerun()
         else:
             st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
@@ -2087,8 +2274,53 @@ with tab2:
                     with st.spinner("Generating coaching insights..."):
                         # Get agents data
                         df = st.session_state.processed_df
-                        agents = df.groupby('agent')
-                        agents_data = [(agent, group) for agent, group in agents]
+                        
+                        # Filter agents with 10+ calls
+                        agent_call_counts = df.groupby('agent')['call_id'].nunique()
+                        eligible_agents = agent_call_counts[agent_call_counts >= 10].index.tolist()
+                        excluded_agents = agent_call_counts[agent_call_counts < 10]
+                        
+                        # Filter DataFrame to eligible agents only
+                        df_filtered = df[df['agent'].isin(eligible_agents)]
+                        
+                        # Show filtering info
+                        st.info(f"📊 **Analysis Scope:**\n"
+                               f"- Analyzing {len(eligible_agents)} agents with 10+ calls\n"
+                               f"- Excluded {len(excluded_agents)} agents with <10 calls (insufficient data)\n"
+                               f"- Prioritizing low sentiment calls for coaching focus")
+                        
+                        # Group by agent and prioritize low sentiment calls
+                        agents_data = []
+                        for agent in eligible_agents:
+                            agent_df = df_filtered[df_filtered['agent'] == agent]
+                            
+                            # Get unique calls for this agent
+                            call_ids = agent_df['call_id'].unique()
+                            
+                            # Calculate sentiment per call (if available)
+                            if 'sentiment_score' in agent_df.columns:
+                                call_sentiments = []
+                                for call_id in call_ids:
+                                    call_data = agent_df[agent_df['call_id'] == call_id]
+                                    avg_sentiment = call_data['sentiment_score'].mean()
+                                    if pd.notna(avg_sentiment):
+                                        call_sentiments.append((call_id, avg_sentiment))
+                                
+                                # Sort by sentiment (lowest first) and take top 4-5
+                                if call_sentiments:
+                                    call_sentiments.sort(key=lambda x: x[1])
+                                    selected_calls = [c[0] for c in call_sentiments[:5]]
+                                else:
+                                    # No sentiment data, just take first 5
+                                    selected_calls = call_ids[:5]
+                            else:
+                                # No sentiment column, just take first 5 calls
+                                selected_calls = call_ids[:5]
+                            
+                            # Get data for selected calls
+                            selected_data = agent_df[agent_df['call_id'].isin(selected_calls)]
+                            agents_data.append((agent, selected_data))
+                        
                         total_agents = len(agents_data)
                         
                         # Get coaching themes from session state (set in sidebar)
@@ -2153,31 +2385,38 @@ with tab2:
                             if not insights or len(insights) == 0:
                                 log_area.error("⚠️ No insights generated. The LLM may have failed.")
                                 
-                                # Show retry option with model selector
+                                # Simple retry button - uses model from sidebar
                                 st.markdown("---")
-                                st.markdown("### 🔄 Retry with Different Model")
-                                st.warning("The selected model may be experiencing issues. Try a different model:")
-                                
-                                retry_col1, retry_col2 = st.columns([3, 1])
-                                with retry_col1:
-                                    retry_model = st.selectbox(
-                                        "Select alternative model:",
-                                        options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
-                                        format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
-                                        key="retry_model_selector"
-                                    )
-                                    st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
-                                
-                                with retry_col2:
-                                    if st.button("🔄 Retry Analysis", use_container_width=True, type="primary"):
-                                        # Update model and clear processed state
-                                        st.session_state.analysis_model = retry_model
-                                        st.session_state.processed = False
-                                        st.session_state.coaching_insights = {}
-                                        st.rerun()
+                                if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary"):
+                                    st.session_state.processed = False
+                                    st.session_state.coaching_insights = {}
+                                    st.rerun()
                                 
                             else:
                                 status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
+                                
+                                # Save insights to DuckDB for caching and chat context
+                                conn = st.session_state.duckdb_conn
+                                cache_rows = []
+                                for agent_name, agent_data in insights.items():
+                                    for theme in agent_data.get('coaching_themes', []):
+                                        cache_rows.append({
+                                            'agent': agent_name,
+                                            'theme': theme.get('theme', ''),
+                                            'priority': theme.get('priority', 'low'),
+                                            'frequency': theme.get('frequency', 1),
+                                            'examples': str(theme.get('examples', [])),
+                                            'recommendation': theme.get('recommendation', ''),
+                                            'processed_at': datetime.now().isoformat(),
+                                            'model_used': st.session_state.get('analysis_model', 'unknown')
+                                        })
+                                
+                                if cache_rows:
+                                    cache_df = pd.DataFrame(cache_rows)
+                                    conn.execute("DROP TABLE IF EXISTS coaching_cache")
+                                    conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
+                                    st.success(f"💾 Cached {len(cache_rows)} coaching insights for future queries")
+                                
                                 st.session_state.coaching_insights = insights
                                 st.session_state.processed = True
                                 time.sleep(1)
@@ -2188,27 +2427,12 @@ with tab2:
                             import traceback
                             log_area.code(traceback.format_exc())
                             
-                            # Show retry option
+                            # Simple retry button
                             st.markdown("---")
-                            st.markdown("### 🔄 Retry with Different Model")
-                            st.warning("An error occurred. Try a different model:")
-                            
-                            retry_col1, retry_col2 = st.columns([3, 1])
-                            with retry_col1:
-                                retry_model = st.selectbox(
-                                    "Select alternative model:",
-                                    options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
-                                    format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
-                                    key="retry_model_selector_error"
-                                )
-                                st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
-                            
-                            with retry_col2:
-                                if st.button("🔄 Retry Analysis", use_container_width=True, type="primary", key="retry_btn_error"):
-                                    st.session_state.analysis_model = retry_model
-                                    st.session_state.processed = False
-                                    st.session_state.coaching_insights = {}
-                                    st.rerun()
+                            if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary", key="retry_error"):
+                                st.session_state.processed = False
+                                st.session_state.coaching_insights = {}
+                                st.rerun()
                         finally:
                             loop.close()
         
@@ -2272,6 +2496,49 @@ with tab3:
             
             # Simple query routing
             question_lower = user_question.lower()
+            
+            # Check coaching cache first
+            try:
+                conn = st.session_state.duckdb_conn
+                has_coaching = conn.execute("SELECT COUNT(*) FROM coaching_cache").fetchone()[0] > 0
+                
+                if has_coaching and any(kw in question_lower for kw in ['coaching', 'theme', 'improve', 'recommendation']):
+                    # Coaching-specific queries
+                    if 'top' in question_lower and 'theme' in question_lower:
+                        result = conn.execute("""
+                            SELECT theme, COUNT(*) as count 
+                            FROM coaching_cache 
+                            GROUP BY theme 
+                            ORDER BY count DESC 
+                            LIMIT 5
+                        """).fetchdf()
+                        themes_list = "\n".join([f"- {row['theme']}: {row['count']} agents" for _, row in result.iterrows()])
+                        answer = f"**Top coaching themes:**\n{themes_list}"
+                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                        st.rerun()
+                    
+                    # Check if agent name is in question
+                    for agent in insights.keys():
+                        if agent.lower() in question_lower:
+                            result = conn.execute(f"""
+                                SELECT theme, priority, recommendation 
+                                FROM coaching_cache 
+                                WHERE agent = '{agent}' 
+                                ORDER BY 
+                                    CASE priority 
+                                        WHEN 'high' THEN 1 
+                                        WHEN 'medium' THEN 2 
+                                        ELSE 3 
+                                    END
+                                LIMIT 3
+                            """).fetchdf()
+                            themes = "\n".join([f"- **{row['theme']}** ({row['priority']} priority): {row['recommendation']}" 
+                                               for _, row in result.iterrows()])
+                            answer = f"**Coaching needs for {agent}:**\n{themes}"
+                            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                            st.rerun()
+            except:
+                pass
             
             # Check if it's a SQL-like question
             if any(kw in question_lower for kw in ['how many', 'count', 'average', 'total', 'list all']):
@@ -2485,5 +2752,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS TEAM 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
