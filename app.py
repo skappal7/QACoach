@@ -1371,7 +1371,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1483,14 +1483,17 @@ with tab1:
                                 'timestamp': turn['timestamp'],
                                 'speaker': turn['speaker'],
                                 'message': turn['message'],
-                                'sentiment_score': sentiment
+                                'sentiment_score': sentiment,
+                                'original_transcript': transcript_text
                             })
                     
                     expanded_df = pd.DataFrame(expanded_rows)
                     
-                    # Reload into DuckDB
+                    # Register and reload into DuckDB
+                    conn.register('expanded_df_view', expanded_df)
                     conn.execute("DROP TABLE IF EXISTS transcripts")
-                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
+                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df_view")
+                    conn.unregister('expanded_df_view')
                     
                     st.session_state.processed_df = expanded_df
                     
