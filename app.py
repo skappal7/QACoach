@@ -478,12 +478,13 @@ def parse_transcript_chunk(chunk_data):
     return results
 
 def parse_transcripts_parallel(df, call_id_col, agent_col, transcript_col, sentiment_col, num_workers=None):
-    """Parse transcripts in parallel using multiprocessing"""
-    from multiprocessing import Pool, cpu_count
-    import numpy as np
+    """Parse transcripts in parallel using concurrent.futures (Streamlit Cloud compatible)"""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from multiprocessing import cpu_count
+    import os
     
     if num_workers is None:
-        num_workers = max(1, cpu_count() - 1)  # Leave 1 core free
+        num_workers = max(1, cpu_count() - 1)
     
     # Prepare data
     chunk_data = []
@@ -497,18 +498,26 @@ def parse_transcripts_parallel(df, call_id_col, agent_col, transcript_col, senti
         
         chunk_data.append((call_id, agent_name, transcript_text, sentiment))
     
-    # Split into chunks for parallel processing
-    chunk_size = max(100, len(chunk_data) // (num_workers * 4))  # 4 chunks per worker
+    # Split into chunks
+    chunk_size = max(50, len(chunk_data) // (num_workers * 8))  # Smaller chunks for responsiveness
     chunks = [chunk_data[i:i + chunk_size] for i in range(0, len(chunk_data), chunk_size)]
     
-    # Process in parallel
-    with Pool(processes=num_workers) as pool:
-        results = pool.map(parse_transcript_chunk, chunks)
-    
-    # Flatten results
+    # Process in parallel with progress updates
     expanded_rows = []
-    for chunk_result in results:
-        expanded_rows.extend(chunk_result)
+    
+    # Use ProcessPoolExecutor with spawn context for Streamlit Cloud
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all chunks
+        future_to_chunk = {executor.submit(parse_transcript_chunk, chunk): i for i, chunk in enumerate(chunks)}
+        
+        # Process results as they complete (allows yielding control)
+        for future in as_completed(future_to_chunk):
+            try:
+                chunk_result = future.result(timeout=30)  # 30s timeout per chunk
+                expanded_rows.extend(chunk_result)
+            except Exception as e:
+                print(f"Chunk processing error: {str(e)}")
+                continue
     
     return expanded_rows
 
@@ -1964,14 +1973,55 @@ with tab1:
                     progress_text.text("📝 Parsing transcripts in parallel...")
                     progress_bar.progress(0.2)
                     
-                    # Parse transcripts using multiprocessing
+                    # Parse transcripts using parallel processing
                     from multiprocessing import cpu_count
-                    num_cores = cpu_count()
-                    st.info(f"🚀 Using {num_cores - 1} CPU cores for parallel processing")
+                    from concurrent.futures import ProcessPoolExecutor, as_completed
                     
-                    expanded_rows = parse_transcripts_parallel(
-                        df, call_id_col, agent_col, transcript_col, sentiment_col
-                    )
+                    num_cores = cpu_count()
+                    num_workers = max(1, num_cores - 1)
+                    st.info(f"🚀 Using {num_workers} CPU cores for parallel processing")
+                    
+                    # Prepare data
+                    chunk_data = []
+                    for idx, row in df.iterrows():
+                        call_id = row[call_id_col]
+                        agent_name = row[agent_col]
+                        transcript_text = row[transcript_col]
+                        sentiment = None
+                        if sentiment_col and sentiment_col != "None":
+                            sentiment = row.get(sentiment_col)
+                        
+                        chunk_data.append((call_id, agent_name, transcript_text, sentiment))
+                    
+                    # Split into chunks
+                    chunk_size = max(50, len(chunk_data) // (num_workers * 8))
+                    chunks = [chunk_data[i:i + chunk_size] for i in range(0, len(chunk_data), chunk_size)]
+                    total_chunks = len(chunks)
+                    
+                    progress_text.text(f"📝 Processing {len(chunk_data):,} transcripts in {total_chunks} chunks...")
+                    
+                    # Process in parallel with incremental progress
+                    expanded_rows = []
+                    completed_chunks = 0
+                    
+                    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                        future_to_chunk = {executor.submit(parse_transcript_chunk, chunk): i for i, chunk in enumerate(chunks)}
+                        
+                        for future in as_completed(future_to_chunk):
+                            try:
+                                chunk_result = future.result(timeout=30)
+                                expanded_rows.extend(chunk_result)
+                                completed_chunks += 1
+                                
+                                # Update progress
+                                progress_pct = 0.2 + (0.4 * completed_chunks / total_chunks)
+                                progress_bar.progress(progress_pct)
+                                progress_text.text(f"📝 Parsed {completed_chunks}/{total_chunks} chunks ({len(expanded_rows):,} turns so far)...")
+                                
+                            except Exception as e:
+                                st.warning(f"⚠️ Chunk processing error: {str(e)}")
+                                completed_chunks += 1
+                                continue
                     
                     progress_bar.progress(0.6)
                     progress_text.text("💾 Loading into DuckDB...")
@@ -2066,7 +2116,7 @@ with tab1:
                     progress_text.empty()
                     progress_bar.empty()
                     
-                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_cores - 1} CPU cores.")
+                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_workers} CPU cores.")
                     st.rerun()
         else:
             st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
