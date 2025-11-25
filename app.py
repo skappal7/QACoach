@@ -1313,6 +1313,7 @@ with st.sidebar:
         value=10,
         help="More = faster but may hit rate limits"
     )
+    st.session_state.max_concurrent = max_concurrent
     
     calls_per_minute = st.number_input(
         "Rate limit (calls/min):",
@@ -1321,6 +1322,7 @@ with st.sidebar:
         value=50,
         help="Your OpenRouter/API rate limit"
     )
+    st.session_state.calls_per_minute = calls_per_minute
     
     st.markdown("---")
     st.markdown("#### Coaching Themes")
@@ -1336,11 +1338,14 @@ with st.sidebar:
     else:
         coaching_themes = DEFAULT_THEMES
     
+    st.session_state.coaching_themes = coaching_themes
+    st.session_state.analysis_model = analysis_model if st.session_state.llm_provider == "openrouter" else analysis_model
+    
     st.caption(f"{len(coaching_themes)} themes active")
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1628,9 +1633,15 @@ with tab2:
                         agents_data = [(agent, group) for agent, group in agents]
                         total_agents = len(agents_data)
                         
+                        # Get coaching themes from session state (set in sidebar)
+                        themes = st.session_state.get('coaching_themes', DEFAULT_THEMES)
+                        
+                        st.info(f"Processing {total_agents} agents with {len(themes)} coaching themes")
+                        
                         # Progress tracking
                         progress_bar = st.progress(0.0)
                         status_text = st.empty()
+                        log_area = st.empty()
                         
                         start_time = time.time()
                         
@@ -1638,13 +1649,13 @@ with tab2:
                         async def run_processing():
                             insights = await process_all_agents_parallel(
                                 agents_data,
-                                coaching_themes,
-                                analysis_model,
+                                themes,
+                                st.session_state.get('analysis_model', 'qwen/qwen3-coder:free'),
                                 st.session_state.llm_provider,
                                 st.session_state.get('openrouter_api_key'),
                                 st.session_state.get('local_llm_url'),
-                                max_concurrent=max_concurrent,
-                                calls_per_minute=calls_per_minute
+                                max_concurrent=st.session_state.get('max_concurrent', 10),
+                                calls_per_minute=st.session_state.get('calls_per_minute', 50)
                             )
                             return insights
                         
@@ -1663,6 +1674,9 @@ with tab2:
                             progress_bar.progress(1.0)
                             status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
                             
+                            if not insights:
+                                log_area.error("⚠️ No insights generated. Check LLM connection and logs.")
+                            
                             st.session_state.coaching_insights = insights
                             st.session_state.processed = True
                             
@@ -1671,6 +1685,8 @@ with tab2:
                             
                         except Exception as e:
                             st.error(f"Processing failed: {str(e)}")
+                            import traceback
+                            log_area.code(traceback.format_exc())
                         finally:
                             loop.close()
         
