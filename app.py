@@ -235,8 +235,8 @@ if 'pre_analysis_done' not in st.session_state:
 
 # Model configurations
 MODELS = {
-    "deepseek/deepseek-chat-v3.1:free": {
-        "name": "DeepSeek Chat v3.1",
+    "deepseek/deepseek-chat:free": {
+        "name": "DeepSeek Chat",
         "stars": "⭐⭐⭐⭐⭐",
         "best_for": "Advanced reasoning & analysis",
         "speed": "Fast",
@@ -254,22 +254,10 @@ MODELS = {
         "best_for": "Balanced performance & quality",
         "speed": "Medium"
     },
-    "qwen/qwen-2.5-vl-32b-instruct:free": {
-        "name": "Qwen 2.5 VL 32B",
+    "qwen/qwen-2.5-72b-instruct:free": {
+        "name": "Qwen 2.5 72B",
         "stars": "⭐⭐⭐⭐",
         "best_for": "Structured analysis",
-        "speed": "Fast"
-    },
-    "qwen/qwen3-235b-a22b:free": {
-        "name": "Qwen3 235B",
-        "stars": "⭐⭐⭐⭐⭐",
-        "best_for": "High-quality coaching insights",
-        "speed": "Slower"
-    },
-    "minimax/minimax-m2:free": {
-        "name": "MiniMax M2",
-        "stars": "⭐⭐⭐⭐",
-        "best_for": "General purpose analysis",
         "speed": "Fast"
     },
     "mistralai/mistral-7b-instruct:free": {
@@ -278,41 +266,11 @@ MODELS = {
         "best_for": "Quick basic analysis",
         "speed": "Very Fast"
     },
-    "openchat/openchat-7b:free": {
-        "name": "OpenChat 7B",
-        "stars": "⭐⭐⭐",
-        "best_for": "Fast conversational analysis",
-        "speed": "Very Fast"
-    },
     "gryphe/mythomax-l2-13b:free": {
         "name": "MythoMax L2 13B",
         "stars": "⭐⭐⭐",
         "best_for": "Creative coaching suggestions",
         "speed": "Fast"
-    },
-    "openai/gpt-oss-20b:free": {
-        "name": "GPT OSS 20B",
-        "stars": "⭐⭐⭐",
-        "best_for": "Basic coaching themes",
-        "speed": "Fast"
-    },
-    "meta-llama/llama-4-maverick:free": {
-        "name": "Llama 4 Maverick",
-        "stars": "⭐⭐⭐⭐",
-        "best_for": "Experimental advanced features",
-        "speed": "Medium"
-    },
-    "moonshotai/kimi-vl-a3b-thinking:free": {
-        "name": "Kimi VL Thinking",
-        "stars": "⭐⭐⭐⭐",
-        "best_for": "Thoughtful analysis",
-        "speed": "Medium"
-    },
-    "moonshotai/kimi-k2:free": {
-        "name": "Kimi K2",
-        "stars": "⭐⭐⭐⭐",
-        "best_for": "Comprehensive analysis",
-        "speed": "Medium"
     },
     "mistralai/mistral-nemo:free": {
         "name": "Mistral Nemo",
@@ -936,6 +894,104 @@ async def process_all_agents_parallel(
             insights[agent_name] = data
     
     return insights
+
+def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
+    """Generate mailto link with embedded HTML card for agent coaching details"""
+    import urllib.parse
+    
+    themes = agent_data.get('coaching_themes', [])
+    calls = agent_data.get('calls_analyzed', 0)
+    strengths = agent_data.get('strengths', [])
+    
+    # Build HTML email body
+    html_body = f"""
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <!-- Header -->
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid #667eea;">
+            <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.8rem; font-weight: 700;">
+                {agent_name[0].upper()}
+            </div>
+            <div>
+                <h2 style="margin: 0; font-size: 1.5rem; color: #333;">{agent_name}</h2>
+                <p style="margin: 5px 0 0 0; color: #666;">Coaching Plan</p>
+            </div>
+        </div>
+        
+        <!-- Metadata -->
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 25px;">
+            <p style="margin: 0;"><strong>📊 Calls Analyzed:</strong> {calls}</p>
+            <p style="margin: 10px 0 0 0;"><strong>📅 Generated:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
+        </div>
+        
+        <!-- Coaching Themes -->
+        <h3 style="color: #667eea; margin-bottom: 15px;">🎯 Coaching Themes</h3>
+"""
+    
+    for idx, theme in enumerate(themes, 1):
+        theme_name = theme.get('theme', '')
+        priority = theme.get('priority', 'low')
+        recommendation = theme.get('recommendation', '')
+        examples = theme.get('examples', [])
+        
+        # Priority styling
+        if priority == 'high':
+            priority_bg = '#f5576c'
+            priority_label = '🔴 HIGH'
+        elif priority == 'medium':
+            priority_bg = '#ffa726'
+            priority_label = '🟡 MEDIUM'
+        else:
+            priority_bg = '#66bb6a'
+            priority_label = '🟢 LOW'
+        
+        html_body += f"""
+        <div style="background: #ffffff; border: 2px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 1.1rem; color: #333;">{idx}. {theme_name}</h4>
+                <span style="background: {priority_bg}; color: white; padding: 6px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: 700;">
+                    {priority_label}
+                </span>
+            </div>
+            
+            <p style="margin: 10px 0; color: #666;"><strong>💡 Recommendation:</strong></p>
+            <p style="margin: 5px 0 10px 0; color: #555; font-style: italic;">{recommendation}</p>
+            
+            {f'<p style="margin: 10px 0 5px 0; color: #666;"><strong>📝 Examples:</strong></p><ul style="margin: 5px 0; padding-left: 20px; color: #555;">' + ''.join([f'<li>{ex}</li>' for ex in examples[:2]]) + '</ul>' if examples else ''}
+        </div>
+"""
+    
+    # Strengths
+    if strengths:
+        html_body += """
+        <h3 style="color: #43e97b; margin: 25px 0 15px 0;">✨ Strengths</h3>
+        <ul style="background: #f0fdf4; padding: 15px 15px 15px 35px; border-radius: 10px; margin: 0;">
+"""
+        for strength in strengths:
+            html_body += f"            <li style='color: #333; margin: 8px 0;'>{strength}</li>\n"
+        
+        html_body += """
+        </ul>
+"""
+    
+    html_body += """
+        <!-- Footer -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; text-align: center; color: #999; font-size: 0.85rem;">
+            <p style="margin: 0;">Generated by QA Coaching Intelligence Platform</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+    
+    # URL encode for mailto
+    subject = f"Coaching Plan for {agent_name}"
+    body_encoded = urllib.parse.quote(html_body)
+    
+    mailto_link = f"mailto:?subject={urllib.parse.quote(subject)}&body={body_encoded}"
+    
+    return mailto_link
 
 def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     """Generate beautiful HTML report"""
@@ -1599,14 +1655,25 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         strengths = agent_data.get('strengths', [])
         calls_analyzed = agent_data.get('calls_analyzed', 0)
         
+        # Generate email share link
+        mailto_link = generate_email_share_link(agent_name, agent_data)
+        
         html += f"""
                 <div class="agent-card">
-                    <div class="agent-header">
-                        <div class="agent-name">👤 {agent_name}</div>
-                        <div class="agent-stats">
-                            <div class="stat-badge">{calls_analyzed} calls</div>
-                            <div class="stat-badge">{len(themes)} themes</div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                        <div class="agent-header" style="flex: 1;">
+                            <div class="agent-name">👤 {agent_name}</div>
+                            <div class="agent-stats">
+                                <div class="stat-badge">{calls_analyzed} calls</div>
+                                <div class="stat-badge">{len(themes)} themes</div>
+                            </div>
                         </div>
+                        <a href="{mailto_link}" style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; border-radius: 25px; text-decoration: none; font-weight: 700; font-size: 1rem; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); border: 2px solid white;" 
+           onmouseover="this.style.transform='translateY(-3px) scale(1.05)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.6)';" 
+           onmouseout="this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.4)';">
+                            <span style="font-size: 1.2rem;">📧</span>
+                            <span>Share via Email</span>
+                        </a>
                     </div>
                     
                     <div class="theme-list">
@@ -2340,7 +2407,7 @@ with tab2:
                             insights = await process_all_agents_parallel(
                                 agents_data,
                                 themes,
-                                st.session_state.get('analysis_model', 'deepseek/deepseek-chat-v3.1:free'),
+                                st.session_state.get('analysis_model', 'deepseek/deepseek-chat:free'),
                                 st.session_state.llm_provider,
                                 st.session_state.get('openrouter_api_key'),
                                 st.session_state.get('local_llm_url'),
@@ -2752,5 +2819,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS TEAM 2025", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
