@@ -97,55 +97,61 @@ st.markdown("""
     }
     
     .metric-card {
-        background: rgba(255,255,255,0.95);
-        padding: 30px;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        background: white;
+        border: 1px solid #e2e8f0;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         transition: all 0.3s ease;
     }
     
     .metric-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 40px rgba(102,126,234,0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-color: #0ea5e9;
     }
     
     .agent-card {
         background: white;
-        padding: 25px;
-        border-radius: 15px;
+        padding: 24px;
+        border-radius: 12px;
         margin: 15px 0;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        border-left: 5px solid #667eea;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border: 1px solid #e2e8f0;
+        border-left: 4px solid #0ea5e9;
         transition: all 0.3s ease;
     }
     
     .agent-card:hover {
-        transform: translateX(5px);
-        box-shadow: 0 10px 25px rgba(102,126,234,0.3);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-left-color: #0284c7;
     }
     
     .theme-badge {
         display: inline-block;
-        padding: 8px 16px;
-        border-radius: 20px;
+        padding: 6px 14px;
+        border-radius: 16px;
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         margin: 5px;
     }
     
     .priority-high {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        color: white;
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
     }
     
     .priority-medium {
-        background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
-        color: white;
+        background: #fffbeb;
+        color: #d97706;
+        border: 1px solid #fde68a;
     }
     
     .priority-low {
-        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-        color: #333;
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
     }
     
     .chat-message {
@@ -254,11 +260,41 @@ MODELS = {
         "best_for": "Balanced performance & quality",
         "speed": "Medium"
     },
+    "x-ai/grok-4.1-fast:free": {
+        "name": "Grok 4.1 Fast",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Fast reasoning & insights",
+        "speed": "Very Fast"
+    },
+    "google/gemma-3-27b-it:free": {
+        "name": "Gemma 3 27B",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Google's efficient model",
+        "speed": "Fast"
+    },
     "qwen/qwen-2.5-72b-instruct:free": {
         "name": "Qwen 2.5 72B",
         "stars": "⭐⭐⭐⭐",
         "best_for": "Structured analysis",
         "speed": "Fast"
+    },
+    "openai/gpt-oss-20b:free": {
+        "name": "GPT OSS 20B",
+        "stars": "⭐⭐⭐",
+        "best_for": "Basic coaching themes",
+        "speed": "Fast"
+    },
+    "meituan/longcat-flash-chat:free": {
+        "name": "LongCat Flash",
+        "stars": "⭐⭐⭐",
+        "best_for": "Quick chat analysis",
+        "speed": "Very Fast"
+    },
+    "microsoft/mai-ds-r1:free": {
+        "name": "MAI DS R1",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Microsoft's reasoning model",
+        "speed": "Medium"
     },
     "mistralai/mistral-7b-instruct:free": {
         "name": "Mistral 7B",
@@ -378,11 +414,11 @@ FIVE_C_ICONS = {
 
 # 5C Colors
 FIVE_C_COLORS = {
-    "Connection": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    "Clarity": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-    "Commitment": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-    "Challenge": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-    "Change": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
+    "Connection": "#3b82f6",  # Blue
+    "Clarity": "#8b5cf6",     # Purple  
+    "Commitment": "#0ea5e9",  # Sky blue
+    "Challenge": "#10b981",   # Green
+    "Change": "#f59e0b"       # Amber
 }
 
 class RateLimiter:
@@ -896,37 +932,24 @@ async def process_all_agents_parallel(
     return insights
 
 def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
-    """Generate mailto link with embedded HTML card for agent coaching details"""
+    """Generate mailto link with plain text coaching plan (renders in all email clients)"""
     import urllib.parse
     
     themes = agent_data.get('coaching_themes', [])
     calls = agent_data.get('calls_analyzed', 0)
     strengths = agent_data.get('strengths', [])
     
-    # Build HTML email body
-    html_body = f"""
-<html>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-        <!-- Header -->
-        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid #667eea;">
-            <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.8rem; font-weight: 700;">
-                {agent_name[0].upper()}
-            </div>
-            <div>
-                <h2 style="margin: 0; font-size: 1.5rem; color: #333;">{agent_name}</h2>
-                <p style="margin: 5px 0 0 0; color: #666;">Coaching Plan</p>
-            </div>
-        </div>
-        
-        <!-- Metadata -->
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 25px;">
-            <p style="margin: 0;"><strong>📊 Calls Analyzed:</strong> {calls}</p>
-            <p style="margin: 10px 0 0 0;"><strong>📅 Generated:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
-        </div>
-        
-        <!-- Coaching Themes -->
-        <h3 style="color: #667eea; margin-bottom: 15px;">🎯 Coaching Themes</h3>
+    # Build plain text email body that will render nicely
+    text_body = f"""COACHING PLAN FOR {agent_name.upper()}
+{'=' * 60}
+
+📊 SUMMARY
+   • Calls Analyzed: {calls}
+   • Date Generated: {datetime.now().strftime('%B %d, %Y')}
+
+{'=' * 60}
+
+🎯 COACHING THEMES
 """
     
     for idx, theme in enumerate(themes, 1):
@@ -935,59 +958,46 @@ def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
         recommendation = theme.get('recommendation', '')
         examples = theme.get('examples', [])
         
-        # Priority styling
-        if priority == 'high':
-            priority_bg = '#f5576c'
-            priority_label = '🔴 HIGH'
-        elif priority == 'medium':
-            priority_bg = '#ffa726'
-            priority_label = '🟡 MEDIUM'
-        else:
-            priority_bg = '#66bb6a'
-            priority_label = '🟢 LOW'
+        priority_label = {
+            'high': '🔴 HIGH PRIORITY',
+            'medium': '🟡 MEDIUM PRIORITY',
+            'low': '🟢 LOW PRIORITY'
+        }.get(priority, 'LOW')
         
-        html_body += f"""
-        <div style="background: #ffffff; border: 2px solid #e0e0e0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h4 style="margin: 0; font-size: 1.1rem; color: #333;">{idx}. {theme_name}</h4>
-                <span style="background: {priority_bg}; color: white; padding: 6px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: 700;">
-                    {priority_label}
-                </span>
-            </div>
-            
-            <p style="margin: 10px 0; color: #666;"><strong>💡 Recommendation:</strong></p>
-            <p style="margin: 5px 0 10px 0; color: #555; font-style: italic;">{recommendation}</p>
-            
-            {f'<p style="margin: 10px 0 5px 0; color: #666;"><strong>📝 Examples:</strong></p><ul style="margin: 5px 0; padding-left: 20px; color: #555;">' + ''.join([f'<li>{ex}</li>' for ex in examples[:2]]) + '</ul>' if examples else ''}
-        </div>
+        text_body += f"""
+{idx}. {theme_name.upper()}
+   Priority: {priority_label}
+   
+   💡 Recommendation:
+   {recommendation}
 """
+        
+        if examples:
+            text_body += f"""   
+   📝 Examples:
+"""
+            for ex in examples[:2]:
+                text_body += f"   • {ex}\n"
+        
+        text_body += "\n" + ("-" * 60) + "\n"
     
     # Strengths
     if strengths:
-        html_body += """
-        <h3 style="color: #43e97b; margin: 25px 0 15px 0;">✨ Strengths</h3>
-        <ul style="background: #f0fdf4; padding: 15px 15px 15px 35px; border-radius: 10px; margin: 0;">
+        text_body += f"""
+✨ STRENGTHS
 """
         for strength in strengths:
-            html_body += f"            <li style='color: #333; margin: 8px 0;'>{strength}</li>\n"
+            text_body += f"   • {strength}\n"
         
-        html_body += """
-        </ul>
-"""
+        text_body += "\n" + ("=" * 60) + "\n"
     
-    html_body += """
-        <!-- Footer -->
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; text-align: center; color: #999; font-size: 0.85rem;">
-            <p style="margin: 0;">Generated by QA Coaching Intelligence Platform</p>
-        </div>
-    </div>
-</body>
-</html>
+    text_body += """
+Generated by QA Coaching Intelligence Platform
 """
     
     # URL encode for mailto
-    subject = f"Coaching Plan for {agent_name}"
-    body_encoded = urllib.parse.quote(html_body)
+    subject = f"Coaching Plan - {agent_name}"
+    body_encoded = urllib.parse.quote(text_body)
     
     mailto_link = f"mailto:?subject={urllib.parse.quote(subject)}&body={body_encoded}"
     
@@ -1036,84 +1046,90 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 text-align: center;
                 margin-bottom: 50px;
                 padding-bottom: 30px;
-                border-bottom: 3px solid #667eea;
+                border-bottom: 2px solid #e2e8f0;
             }}
             
             h1 {{
-                font-size: 3rem;
+                font-size: 2.5rem;
                 font-weight: 700;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
+                color: #1e293b;
                 margin-bottom: 10px;
             }}
             
             .subtitle {{
-                color: #666;
-                font-size: 1.2rem;
+                color: #64748b;
+                font-size: 1.1rem;
             }}
             
             .metrics-grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                 gap: 20px;
-                margin-bottom: 30px;
+                margin-bottom: 40px;
             }}
             
             .metric-card {{
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 20px;
-                border-radius: 15px;
-                color: white;
-                box-shadow: 0 4px 12px rgba(102,126,234,0.2);
-                transition: transform 0.3s ease;
+                background: white;
+                border: 1px solid #e2e8f0;
+                padding: 24px;
+                border-radius: 12px;
+                transition: all 0.3s ease;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             }}
             
             .metric-card:hover {{
-                transform: translateY(-3px);
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                border-color: #0ea5e9;
             }}
             
             .metric-label {{
-                font-size: 0.85rem;
-                opacity: 0.9;
+                font-size: 0.8rem;
+                color: #64748b;
                 margin-bottom: 8px;
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                letter-spacing: 0.5px;
+                font-weight: 600;
             }}
             
             .metric-value {{
                 font-size: 2rem;
                 font-weight: 700;
+                color: #0ea5e9;
             }}
             
             .section-title {{
-                font-size: 2rem;
+                font-size: 1.75rem;
                 font-weight: 700;
-                color: #333;
+                color: #1e293b;
                 margin: 50px 0 30px 0;
                 padding-bottom: 15px;
-                border-bottom: 3px solid #667eea;
+                border-bottom: 2px solid #e2e8f0;
+                display: flex;
+                align-items: center;
+                gap: 12px;
             }}
             
             .chart-container {{
-                background: #f8f9fa;
+                background: white;
+                border: 1px solid #e2e8f0;
                 padding: 30px;
-                border-radius: 20px;
+                border-radius: 12px;
                 margin-bottom: 40px;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             }}
             
             .agent-grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-                gap: 30px;
+                gap: 24px;
                 margin-bottom: 50px;
             }}
             
             .agent-card {{
                 background: white;
-                border: 2px solid #e0e0e0;
-                border-radius: 20px;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
                 padding: 30px;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.1);
                 transition: all 0.3s ease;
@@ -1276,7 +1292,13 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     <body>
         <div class="container">
             <div class="header">
-                <h1>🎯 QA Coaching Intelligence Report</h1>
+                <h1>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 10px;">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 6v6l4 2"></path>
+                    </svg>
+                    QA Coaching Intelligence Report
+                </h1>
                 <p class="subtitle">Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
             </div>
             
@@ -1295,11 +1317,18 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Average Sentiment</div>
-                    <div class="metric-value">{"😊 " + f"{avg_sentiment:.2f}" if avg_sentiment > 0 else "N/A"}</div>
+                    <div class="metric-value">{f"{avg_sentiment:.2f}" if avg_sentiment > 0 else "N/A"}</div>
                 </div>
             </div>
             
-            <h2 class="section-title">📊 5C Coaching Framework Analysis</h2>
+            <h2 class="section-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.29 7 12 12 20.71 7"></polyline>
+                    <line x1="12" y1="22" x2="12" y2="12"></line>
+                </svg>
+                5C Coaching Framework Analysis
+            </h2>
             <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border-radius: 15px;">
                 <p style="font-size: 0.95rem; color: #666; text-align: center; margin-bottom: 20px;">
                     Coaching themes mapped to the 5 fundamental pillars of customer service excellence
@@ -1403,7 +1432,14 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 </div>
             </div>
             
-            <h2 class="section-title">📊 Coaching Theme Distribution</h2>
+            <h2 class="section-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                    <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+                Coaching Theme Distribution
+            </h2>
             <div class="chart-container">
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 20px;">
     """
@@ -1466,7 +1502,13 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 </div>
             </div>
             
-            <h2 class="section-title">📋 Agent Performance Summary</h2>
+            <h2 class="section-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                Agent Performance Summary
+            </h2>
             <div style="margin: 20px 0;">
     """
     
@@ -1645,7 +1687,15 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     html += """
             </div>
             
-            <h2 class="section-title">👥 Agent Coaching Details</h2>
+            <h2 class="section-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                Agent Coaching Details
+            </h2>
             <div class="agent-grid">
     """
     
@@ -1660,20 +1710,22 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         
         html += f"""
                 <div class="agent-card">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-                        <div class="agent-header" style="flex: 1;">
+                    <div style="position: relative;">
+                        <a href="{mailto_link}" title="Share via email" style="position: absolute; top: 15px; right: 15px; width: 36px; height: 36px; background: #0ea5e9; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3); z-index: 10;" 
+                           onmouseover="this.style.background='#0284c7'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(14, 165, 233, 0.5)';" 
+                           onmouseout="this.style.background='#0ea5e9'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 8px rgba(14, 165, 233, 0.3)';">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                        </a>
+                        <div class="agent-header">
                             <div class="agent-name">👤 {agent_name}</div>
                             <div class="agent-stats">
                                 <div class="stat-badge">{calls_analyzed} calls</div>
                                 <div class="stat-badge">{len(themes)} themes</div>
                             </div>
                         </div>
-                        <a href="{mailto_link}" style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; border-radius: 25px; text-decoration: none; font-weight: 700; font-size: 1rem; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); border: 2px solid white;" 
-           onmouseover="this.style.transform='translateY(-3px) scale(1.05)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.6)';" 
-           onmouseout="this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.4)';">
-                            <span style="font-size: 1.2rem;">📧</span>
-                            <span>Share via Email</span>
-                        </a>
                     </div>
                     
                     <div class="theme-list">
@@ -2020,7 +2072,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2819,5 +2871,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
