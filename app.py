@@ -505,6 +505,10 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
             match = re.match(pipe_pattern, segment)
             if match:
                 timestamp, speaker, message = match.groups()
+                # Clean HTML tags
+                message = re.sub(r'<br\s*/?>', ' ', message)  # Replace <br> with space
+                message = re.sub(r'<[^>]+>', '', message)  # Remove all other HTML tags
+                message = ' '.join(message.split())  # Normalize whitespace
                 turns.append({
                     'timestamp': timestamp,
                     'speaker': normalize_speaker(speaker.strip()),
@@ -515,8 +519,10 @@ def parse_multiline_transcript(transcript_text: str) -> List[Dict]:
         matches = re.findall(bracket_pattern, transcript_text, re.DOTALL)
         for match in matches:
             timestamp, speaker, message = match
-            # Clean up message (remove extra whitespace/newlines)
-            message = ' '.join(message.split())
+            # Clean up message (remove extra whitespace/newlines and HTML tags)
+            message = re.sub(r'<br\s*/?>', ' ', message)  # Replace <br> with space
+            message = re.sub(r'<[^>]+>', '', message)  # Remove all other HTML tags
+            message = ' '.join(message.split())  # Normalize whitespace
             if message:
                 turns.append({
                     'timestamp': timestamp.strip(),
@@ -1799,7 +1805,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
