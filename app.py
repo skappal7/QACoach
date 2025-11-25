@@ -1628,7 +1628,11 @@ with tab1:
                         call_id = row[call_id_col]
                         agent_name = row[agent_col]
                         transcript_text = row[transcript_col]
-                        sentiment = row[sentiment_col] if sentiment_col != "None" and sentiment_col in row else None
+                        
+                        # Handle sentiment safely
+                        sentiment = None
+                        if sentiment_col and sentiment_col != "None":
+                            sentiment = row.get(sentiment_col)
                         
                         # Parse transcript
                         turns = parse_multiline_transcript(str(transcript_text))
