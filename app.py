@@ -1368,7 +1368,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         
         html += f"""
                     <div style="background: white; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.3s ease;">
-                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid {color.split('(')[1].split(')')[0].split(',')[0]};">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid {color};">
                             <div style="font-size: 2rem;">{icon}</div>
                             <div>
                                 <h3 style="font-size: 1.1rem; font-weight: 700; color: #333; margin: 0;">{c_name}</h3>
@@ -1575,20 +1575,20 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 
                 # Priority colors
                 if priority == 'high':
-                    priority_color = "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
-                    priority_icon = "🔴"
+                    priority_color = "#dc2626"  # Red
+                    priority_icon = ""
                 elif priority == 'medium':
-                    priority_color = "linear-gradient(135deg, #ffd89b 0%, #ffa726 100%)"
-                    priority_icon = "🟡"
+                    priority_color = "#f59e0b"  # Amber
+                    priority_icon = ""
                 else:
-                    priority_color = "linear-gradient(135deg, #a8edea 0%, #66bb6a 100%)"
-                    priority_icon = "🟢"
+                    priority_color = "#10b981"  # Green
+                    priority_icon = ""
                 
                 html += f"""
                                 <tr style="background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: all 0.3s ease;">
                                     <td style="padding: 15px; font-weight: 700; font-size: 0.95rem; color: #333; border-radius: 10px 0 0 10px;">
                                         <div style="display: flex; align-items: center; gap: 10px;">
-                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
+                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: #0ea5e9; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
                                                 {agent_name[0].upper()}
                                             </div>
                                             {agent_name}
@@ -1618,7 +1618,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                                 <tr style="background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                                     <td style="padding: 15px; font-weight: 700; font-size: 0.95rem; color: #333; border-radius: 10px 0 0 10px;">
                                         <div style="display: flex; align-items: center; gap: 10px;">
-                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
+                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: #0ea5e9; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1rem;">
                                                 {agent_name[0].upper()}
                                             </div>
                                             {agent_name}
@@ -1651,7 +1651,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         for page in range(total_pages):
             page_num = page + 1
             html += f"""
-                    <button onclick="showPage({page_num})" id="page-btn-{page_num}" style="padding: 10px 16px; border: 2px solid #667eea; background: {'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' if page == 0 else 'white'}; color: {'white' if page == 0 else '#667eea'}; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; font-size: 0.9rem;">
+                    <button onclick="showPage({page_num})" id="page-btn-{page_num}" style="padding: 10px 16px; border: 2px solid #0ea5e9; background: {'#0ea5e9' if page == 0 else 'white'}; color: {'white' if page == 0 else '#0ea5e9'}; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; font-size: 0.9rem;">
                         {page_num}
                     </button>
             """
@@ -1675,10 +1675,10 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                     const buttons = document.querySelectorAll('[id^="page-btn-"]');
                     buttons.forEach(btn => {
                         btn.style.background = 'white';
-                        btn.style.color = '#667eea';
+                        btn.style.color = '#0ea5e9';
                     });
                     
-                    document.getElementById('page-btn-' + pageNum).style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    document.getElementById('page-btn-' + pageNum).style.background = '#0ea5e9';
                     document.getElementById('page-btn-' + pageNum).style.color = 'white';
                 }
                 </script>
@@ -2072,7 +2072,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #64748b;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0ea5e9;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2871,5 +2871,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
