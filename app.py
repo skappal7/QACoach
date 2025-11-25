@@ -235,35 +235,89 @@ if 'pre_analysis_done' not in st.session_state:
 
 # Model configurations
 MODELS = {
-    "qwen/qwen3-coder:free": {
-        "name": "Qwen Coder 3",
+    "deepseek/deepseek-chat-v3.1:free": {
+        "name": "DeepSeek Chat v3.1",
         "stars": "⭐⭐⭐⭐⭐",
-        "best_for": "Structured coaching analysis",
-        "speed": "Very Fast",
+        "best_for": "Advanced reasoning & analysis",
+        "speed": "Fast",
         "recommended": True
     },
-    "x-ai/grok-4.1-fast:free": {
-        "name": "Grok 4.1 Fast",
+    "deepseek/deepseek-r1-distill-llama-70b:free": {
+        "name": "DeepSeek R1 Distill",
         "stars": "⭐⭐⭐⭐⭐",
-        "best_for": "Complex reasoning",
-        "speed": "Fast"
+        "best_for": "Deep reasoning on complex cases",
+        "speed": "Medium"
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
         "name": "Llama 3.3 70B",
+        "stars": "⭐⭐⭐⭐⭐",
+        "best_for": "Balanced performance & quality",
+        "speed": "Medium"
+    },
+    "qwen/qwen-2.5-vl-32b-instruct:free": {
+        "name": "Qwen 2.5 VL 32B",
         "stars": "⭐⭐⭐⭐",
-        "best_for": "Balanced performance",
+        "best_for": "Structured analysis",
+        "speed": "Fast"
+    },
+    "qwen/qwen3-235b-a22b:free": {
+        "name": "Qwen3 235B",
+        "stars": "⭐⭐⭐⭐⭐",
+        "best_for": "High-quality coaching insights",
+        "speed": "Slower"
+    },
+    "minimax/minimax-m2:free": {
+        "name": "MiniMax M2",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "General purpose analysis",
+        "speed": "Fast"
+    },
+    "mistralai/mistral-7b-instruct:free": {
+        "name": "Mistral 7B",
+        "stars": "⭐⭐⭐",
+        "best_for": "Quick basic analysis",
+        "speed": "Very Fast"
+    },
+    "openchat/openchat-7b:free": {
+        "name": "OpenChat 7B",
+        "stars": "⭐⭐⭐",
+        "best_for": "Fast conversational analysis",
+        "speed": "Very Fast"
+    },
+    "gryphe/mythomax-l2-13b:free": {
+        "name": "MythoMax L2 13B",
+        "stars": "⭐⭐⭐",
+        "best_for": "Creative coaching suggestions",
+        "speed": "Fast"
+    },
+    "openai/gpt-oss-20b:free": {
+        "name": "GPT OSS 20B",
+        "stars": "⭐⭐⭐",
+        "best_for": "Basic coaching themes",
+        "speed": "Fast"
+    },
+    "meta-llama/llama-4-maverick:free": {
+        "name": "Llama 4 Maverick",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Experimental advanced features",
+        "speed": "Medium"
+    },
+    "moonshotai/kimi-vl-a3b-thinking:free": {
+        "name": "Kimi VL Thinking",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Thoughtful analysis",
+        "speed": "Medium"
+    },
+    "moonshotai/kimi-k2:free": {
+        "name": "Kimi K2",
+        "stars": "⭐⭐⭐⭐",
+        "best_for": "Comprehensive analysis",
         "speed": "Medium"
     },
     "mistralai/mistral-nemo:free": {
         "name": "Mistral Nemo",
         "stars": "⭐⭐⭐",
         "best_for": "Fast Q&A chat",
-        "speed": "Very Fast"
-    },
-    "mistralai/mistral-small-3.1-24b-instruct:free": {
-        "name": "Mistral Small 3.1",
-        "stars": "⭐⭐⭐",
-        "best_for": "Quick analysis",
         "speed": "Very Fast"
     }
 }
@@ -1472,7 +1526,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #2986cc;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1777,7 +1831,7 @@ with tab2:
                             insights = await process_all_agents_parallel(
                                 agents_data,
                                 themes,
-                                st.session_state.get('analysis_model', 'qwen/qwen3-coder:free'),
+                                st.session_state.get('analysis_model', 'deepseek/deepseek-chat-v3.1:free'),
                                 st.session_state.llm_provider,
                                 st.session_state.get('openrouter_api_key'),
                                 st.session_state.get('local_llm_url'),
@@ -1818,21 +1872,62 @@ with tab2:
                             elapsed = time.time() - start_time
                             
                             progress_bar.progress(1.0)
-                            status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
                             
-                            if not insights:
-                                log_area.error("⚠️ No insights generated. Check logs above.")
-                            
-                            st.session_state.coaching_insights = insights
-                            st.session_state.processed = True
-                            
-                            time.sleep(1)
-                            st.rerun()
+                            if not insights or len(insights) == 0:
+                                log_area.error("⚠️ No insights generated. The LLM may have failed.")
+                                
+                                # Show retry option with model selector
+                                st.markdown("---")
+                                st.markdown("### 🔄 Retry with Different Model")
+                                st.warning("The selected model may be experiencing issues. Try a different model:")
+                                
+                                retry_col1, retry_col2 = st.columns([3, 1])
+                                with retry_col1:
+                                    retry_model = st.selectbox(
+                                        "Select alternative model:",
+                                        options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
+                                        format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
+                                        key="retry_model_selector"
+                                    )
+                                    st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
+                                
+                                with retry_col2:
+                                    if st.button("🔄 Retry Analysis", use_container_width=True, type="primary"):
+                                        # Update model in session state
+                                        st.session_state.analysis_model = retry_model
+                                        st.rerun()
+                                
+                            else:
+                                status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
+                                st.session_state.coaching_insights = insights
+                                st.session_state.processed = True
+                                time.sleep(1)
+                                st.rerun()
                             
                         except Exception as e:
                             st.error(f"Processing failed: {str(e)}")
                             import traceback
                             log_area.code(traceback.format_exc())
+                            
+                            # Show retry option
+                            st.markdown("---")
+                            st.markdown("### 🔄 Retry with Different Model")
+                            st.warning("An error occurred. Try a different model:")
+                            
+                            retry_col1, retry_col2 = st.columns([3, 1])
+                            with retry_col1:
+                                retry_model = st.selectbox(
+                                    "Select alternative model:",
+                                    options=[k for k in MODELS.keys() if k != st.session_state.get('analysis_model')],
+                                    format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
+                                    key="retry_model_selector_error"
+                                )
+                                st.info(f"**{MODELS[retry_model]['best_for']}** | Speed: {MODELS[retry_model]['speed']}")
+                            
+                            with retry_col2:
+                                if st.button("🔄 Retry Analysis", use_container_width=True, type="primary", key="retry_btn_error"):
+                                    st.session_state.analysis_model = retry_model
+                                    st.rerun()
                         finally:
                             loop.close()
         
