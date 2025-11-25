@@ -228,6 +228,10 @@ if 'processing_stats' not in st.session_state:
         'start_time': None,
         'total_tokens': 0
     }
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+if 'pre_analysis_done' not in st.session_state:
+    st.session_state.pre_analysis_done = False
 
 # Model configurations
 MODELS = {
@@ -1367,7 +1371,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1377,189 +1381,324 @@ tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Process", "📊 Dashboard", "�
 with tab1:
     st.markdown("<div style='background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; margin: 20px 0;'>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns([2, 1])
+    st.markdown("### 📤 Step 1: Upload Files")
+    uploaded_files = st.file_uploader(
+        "Supported: CSV, XLSX, XLS, TXT, Parquet",
+        type=['csv', 'xlsx', 'xls', 'txt', 'parquet'],
+        accept_multiple_files=True
+    )
     
-    with col1:
-        st.markdown("### Upload Transcripts")
-        st.caption("Required columns: call_id, agent, transcript, sentiment_score (optional)")
-        uploaded_files = st.file_uploader(
-            "Supported: CSV, XLSX, XLS, TXT, Parquet",
-            type=['csv', 'xlsx', 'xls', 'txt', 'parquet'],
-            accept_multiple_files=True
-        )
+    if uploaded_files:
+        st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
         
-        if uploaded_files:
-            st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
+        if st.button("🔄 Load & Convert to Parquet", use_container_width=True):
+            with st.spinner("Loading and converting files..."):
+                all_data = []
+                
+                for uploaded_file in uploaded_files:
+                    df = load_file_to_dataframe(uploaded_file)
+                    if df is not None:
+                        all_data.append(df)
+                
+                if all_data:
+                    combined_df = pd.concat(all_data, ignore_index=True)
+                    
+                    # Convert to parquet
+                    parquet_bytes = convert_to_parquet(combined_df, 'transcripts.parquet')
+                    st.session_state.transcripts_parquet = parquet_bytes
+                    st.session_state.raw_df = combined_df
+                    
+                    # Load into DuckDB
+                    conn = st.session_state.duckdb_conn
+                    conn.execute("DROP TABLE IF EXISTS transcripts")
+                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM combined_df")
+                    
+                    st.success(f"✅ Loaded {len(combined_df):,} rows | Size: {len(parquet_bytes) / 1024 / 1024:.2f} MB (Parquet)")
+                    
+                    st.session_state.data_loaded = True
     
-    with col2:
-        st.markdown("### Quick Stats")
-        if uploaded_files:
-            st.metric("Files", len(uploaded_files))
-    
-    st.markdown("---")
-    
-    if uploaded_files and st.button("🚀 Process Transcripts", use_container_width=True):
+    if st.session_state.get('data_loaded'):
+        st.markdown("---")
+        st.markdown("### 🗂️ Step 2: Map Columns")
         
-        # Validation
-        if st.session_state.llm_provider == "openrouter" and not st.session_state.get('openrouter_api_key'):
-            st.error("❌ Please provide OpenRouter API key")
-            st.stop()
+        df = st.session_state.raw_df
+        available_columns = list(df.columns)
         
-        with st.spinner("Loading files..."):
-            all_data = []
-            
-            for uploaded_file in uploaded_files:
-                df = load_file_to_dataframe(uploaded_file)
-                if df is not None:
-                    # Add call_id if not present
-                    if 'call_id' not in df.columns:
-                        df['call_id'] = [f"CALL_{i:04d}" for i in range(len(df))]
-                    all_data.append(df)
-            
-            if not all_data:
-                st.error("No valid data loaded")
-                st.stop()
-            
-            combined_df = pd.concat(all_data, ignore_index=True)
-            
-            # Normalize speakers
-            if 'speaker' in combined_df.columns:
-                combined_df['speaker'] = combined_df['speaker'].apply(normalize_speaker)
-            
-            # Convert to parquet and store
-            parquet_bytes = convert_to_parquet(combined_df, 'transcripts.parquet')
-            st.session_state.transcripts_parquet = parquet_bytes
-            
-            # Load into DuckDB
-            conn = st.session_state.duckdb_conn
-            conn.execute("DROP TABLE IF EXISTS transcripts")
-            conn.execute("CREATE TABLE transcripts AS SELECT * FROM combined_df")
-            
-            st.success(f"✅ Loaded {len(combined_df)} rows from {len(uploaded_files)} file(s)")
+        col1, col2, col3 = st.columns(3)
         
-        # Get unique agents and prepare batches
-        if 'agent' in combined_df.columns:
-            agents = combined_df.groupby('agent')
-        else:
-            st.error("No agent column found")
-            st.stop()
+        with col1:
+            st.markdown("#### Required Fields")
+            call_id_col = st.selectbox("Call ID column:", [""] + available_columns, key="call_id_col")
+            agent_col = st.selectbox("Agent column:", [""] + available_columns, key="agent_col")
+            transcript_col = st.selectbox("Transcript column:", [""] + available_columns, key="transcript_col")
         
-        agents_data = [(agent, group) for agent, group in agents]
-        total_agents = len(agents_data)
+        with col2:
+            st.markdown("#### Optional Fields")
+            sentiment_col = st.selectbox("Sentiment Score:", ["None"] + available_columns, key="sentiment_col")
+            timestamp_col = st.selectbox("Timestamp:", ["None"] + available_columns, key="timestamp_col")
+            duration_col = st.selectbox("Call Duration:", ["None"] + available_columns, key="duration_col")
         
-        st.markdown(f"### 📊 Processing {total_agents} agents")
-        
-        # Processing stats
-        st.session_state.processing_stats = {
-            'total_batches': total_agents,
-            'completed_batches': 0,
-            'failed_batches': 0,
-            'start_time': time.time(),
-            'total_tokens': 0
-        }
-        
-        # Create progress containers
-        progress_container = st.container()
-        with progress_container:
-            progress_bar = st.progress(0.0)
-            status_col1, status_col2, status_col3 = st.columns(3)
-            
-            with status_col1:
-                completed_metric = st.empty()
-            with status_col2:
-                speed_metric = st.empty()
-            with status_col3:
-                eta_metric = st.empty()
-            
-            log_expander = st.expander("📋 Processing Log", expanded=False)
-            log_container = log_expander.container()
-        
-        # Run parallel processing
-        async def run_processing():
-            insights = await process_all_agents_parallel(
-                agents_data,
-                coaching_themes,
-                analysis_model,
-                st.session_state.llm_provider,
-                st.session_state.get('openrouter_api_key'),
-                st.session_state.get('local_llm_url'),
-                max_concurrent=max_concurrent,
-                calls_per_minute=calls_per_minute
+        with col3:
+            st.markdown("#### Additional Metrics")
+            custom_cols = st.multiselect(
+                "Other columns to include:",
+                [c for c in available_columns if c not in [call_id_col, agent_col, transcript_col, sentiment_col, timestamp_col, duration_col]],
+                key="custom_cols"
             )
-            return insights
         
-        # Execute async processing with progress updates
-        start_time = time.time()
-        
-        # Create task
-        import nest_asyncio
-        nest_asyncio.apply()
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Process with simulated progress (since we can't get real-time updates from gather)
-        placeholder_insights = {}
-        
-        # Start processing
-        with st.spinner("Processing agents in parallel..."):
-            try:
-                insights = loop.run_until_complete(run_processing())
-                
-                elapsed = time.time() - start_time
-                
-                progress_bar.progress(1.0)
-                completed_metric.metric("Completed", f"{len(insights)}/{total_agents}")
-                speed_metric.metric("Speed", f"{len(insights)/elapsed:.1f} agents/sec")
-                eta_metric.metric("Total Time", f"{elapsed:.1f}s")
-                
-                with log_container:
-                    st.success(f"✅ Processed {len(insights)} agents in {elapsed:.1f} seconds")
-                    if len(insights) < total_agents:
-                        st.warning(f"⚠️ {total_agents - len(insights)} agents failed to process")
-                
-                st.session_state.coaching_insights = insights
-                st.session_state.processed = True
-                st.session_state.processed_df = combined_df
-                
-                # Show summary stats
-                total_themes = sum(len(agent_data.get('coaching_themes', [])) for agent_data in insights.values())
-                
-                st.markdown("---")
-                summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-                with summary_col1:
-                    st.metric("Total Calls", len(combined_df['call_id'].unique()))
-                with summary_col2:
-                    st.metric("Agents Analyzed", len(insights))
-                with summary_col3:
-                    st.metric("Coaching Opportunities", total_themes)
-                with summary_col4:
-                    st.metric("Processing Time", f"{elapsed:.1f}s")
-                
-                st.markdown("<div class='success-banner'>✨ Processing Complete! Check the Dashboard tab.</div>", unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"Processing failed: {str(e)}")
-                with log_container:
-                    st.error(f"Error: {str(e)}")
-            finally:
-                loop.close()
+        # Validate required fields
+        if call_id_col and agent_col and transcript_col:
+            st.success("✅ Required columns mapped")
+            
+            if st.button("📊 Run Pre-Analysis (DuckDB)", use_container_width=True):
+                with st.spinner("Running analytics..."):
+                    conn = st.session_state.duckdb_conn
+                    
+                    # Store column mapping
+                    st.session_state.column_mapping = {
+                        'call_id': call_id_col,
+                        'agent': agent_col,
+                        'transcript': transcript_col,
+                        'sentiment': sentiment_col if sentiment_col != "None" else None,
+                        'timestamp': timestamp_col if timestamp_col != "None" else None,
+                        'duration': duration_col if duration_col != "None" else None,
+                        'custom': custom_cols
+                    }
+                    
+                    # Parse transcripts and expand
+                    expanded_rows = []
+                    for idx, row in df.iterrows():
+                        call_id = row[call_id_col]
+                        agent_name = row[agent_col]
+                        transcript_text = row[transcript_col]
+                        sentiment = row[sentiment_col] if sentiment_col != "None" and sentiment_col in row else None
+                        
+                        # Parse transcript
+                        turns = parse_multiline_transcript(str(transcript_text))
+                        
+                        for turn in turns:
+                            expanded_rows.append({
+                                'call_id': call_id,
+                                'agent': agent_name,
+                                'timestamp': turn['timestamp'],
+                                'speaker': turn['speaker'],
+                                'message': turn['message'],
+                                'sentiment_score': sentiment
+                            })
+                    
+                    expanded_df = pd.DataFrame(expanded_rows)
+                    
+                    # Reload into DuckDB
+                    conn.execute("DROP TABLE IF EXISTS transcripts")
+                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
+                    
+                    st.session_state.processed_df = expanded_df
+                    
+                    # Run DuckDB analytics
+                    analytics = {}
+                    
+                    # 1. Call volumes
+                    analytics['total_calls'] = conn.execute("SELECT COUNT(DISTINCT call_id) as count FROM transcripts").fetchone()[0]
+                    analytics['total_agents'] = conn.execute("SELECT COUNT(DISTINCT agent) as count FROM transcripts").fetchone()[0]
+                    
+                    # 2. Per-agent stats
+                    agent_stats = conn.execute("""
+                        SELECT 
+                            agent,
+                            COUNT(DISTINCT call_id) as total_calls,
+                            COUNT(*) as total_messages,
+                            SUM(CASE WHEN speaker = 'agent' THEN 1 ELSE 0 END) as agent_messages,
+                            SUM(CASE WHEN speaker = 'customer' THEN 1 ELSE 0 END) as customer_messages,
+                            AVG(LENGTH(message)) as avg_message_length
+                        FROM transcripts
+                        GROUP BY agent
+                        ORDER BY total_calls DESC
+                    """).fetchdf()
+                    analytics['agent_stats'] = agent_stats
+                    
+                    # 3. Sentiment analysis (if available)
+                    if sentiment_col != "None":
+                        sentiment_stats = conn.execute("""
+                            SELECT 
+                                agent,
+                                AVG(sentiment_score) as avg_sentiment,
+                                MIN(sentiment_score) as min_sentiment,
+                                MAX(sentiment_score) as max_sentiment,
+                                COUNT(CASE WHEN sentiment_score < 0.5 THEN 1 END) as low_sentiment_calls
+                            FROM (
+                                SELECT DISTINCT call_id, agent, sentiment_score 
+                                FROM transcripts 
+                                WHERE sentiment_score IS NOT NULL
+                            )
+                            GROUP BY agent
+                        """).fetchdf()
+                        analytics['sentiment_stats'] = sentiment_stats
+                    
+                    # 4. Message flow analysis
+                    flow_stats = conn.execute("""
+                        SELECT 
+                            agent,
+                            AVG(turns_per_call) as avg_turns,
+                            AVG(agent_response_ratio) as avg_response_ratio
+                        FROM (
+                            SELECT 
+                                call_id,
+                                agent,
+                                COUNT(*) as turns_per_call,
+                                SUM(CASE WHEN speaker = 'agent' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as agent_response_ratio
+                            FROM transcripts
+                            GROUP BY call_id, agent
+                        )
+                        GROUP BY agent
+                    """).fetchdf()
+                    analytics['flow_stats'] = flow_stats
+                    
+                    st.session_state.pre_analytics = analytics
+                    st.session_state.pre_analysis_done = True
+                    
+                    st.success("✅ Pre-analysis complete!")
+                    st.rerun()
+        else:
+            st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
     
     st.markdown("</div>", unsafe_allow_html=True)
 
 with tab2:
-    if st.session_state.processed:
-        insights = st.session_state.coaching_insights
-        df = st.session_state.processed_df
+    if st.session_state.get('pre_analysis_done'):
+        analytics = st.session_state.pre_analytics
         
-        # Generate and display HTML report
-        html_report = generate_html_report(insights, df)
-        st.components.v1.html(html_report, height=2000, scrolling=True)
+        st.markdown("### 📊 Pre-Analysis Dashboard (DuckDB)")
         
-        # Store for download
-        st.session_state.html_report = html_report
+        # Key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Calls", f"{analytics['total_calls']:,}")
+        with col2:
+            st.metric("Total Agents", analytics['total_agents'])
+        with col3:
+            if 'sentiment_stats' in analytics:
+                avg_sentiment = analytics['sentiment_stats']['avg_sentiment'].mean()
+                st.metric("Avg Sentiment", f"{avg_sentiment:.2f}")
+            else:
+                st.metric("Avg Sentiment", "N/A")
+        with col4:
+            total_messages = analytics['agent_stats']['total_messages'].sum()
+            st.metric("Total Messages", f"{total_messages:,}")
+        
+        st.markdown("---")
+        
+        # Agent performance table
+        st.markdown("#### 👥 Agent Statistics")
+        
+        # Merge stats
+        display_df = analytics['agent_stats'].copy()
+        
+        if 'sentiment_stats' in analytics:
+            display_df = display_df.merge(
+                analytics['sentiment_stats'][['agent', 'avg_sentiment', 'low_sentiment_calls']],
+                on='agent',
+                how='left'
+            )
+        
+        if 'flow_stats' in analytics:
+            display_df = display_df.merge(
+                analytics['flow_stats'][['agent', 'avg_turns', 'avg_response_ratio']],
+                on='agent',
+                how='left'
+            )
+        
+        # Format for display
+        display_df['avg_message_length'] = display_df['avg_message_length'].round(1)
+        if 'avg_sentiment' in display_df.columns:
+            display_df['avg_sentiment'] = display_df['avg_sentiment'].round(2)
+        if 'avg_turns' in display_df.columns:
+            display_df['avg_turns'] = display_df['avg_turns'].round(1)
+        if 'avg_response_ratio' in display_df.columns:
+            display_df['avg_response_ratio'] = (display_df['avg_response_ratio'] * 100).round(1)
+        
+        st.dataframe(display_df, use_container_width=True, height=400)
+        
+        st.markdown("---")
+        
+        # Coaching insights section
+        if not st.session_state.get('processed'):
+            st.markdown("### 🎯 Generate Coaching Insights")
+            st.info("📌 Pre-analysis complete! Now optionally generate AI-powered coaching themes.")
+            
+            # Validation
+            if st.session_state.llm_provider == "openrouter" and not st.session_state.get('openrouter_api_key'):
+                st.error("❌ Please provide OpenRouter API key in sidebar")
+            else:
+                if st.button("🚀 Generate Coaching Themes (LLM)", use_container_width=True, type="primary"):
+                    with st.spinner("Generating coaching insights..."):
+                        # Get agents data
+                        df = st.session_state.processed_df
+                        agents = df.groupby('agent')
+                        agents_data = [(agent, group) for agent, group in agents]
+                        total_agents = len(agents_data)
+                        
+                        # Progress tracking
+                        progress_bar = st.progress(0.0)
+                        status_text = st.empty()
+                        
+                        start_time = time.time()
+                        
+                        # Run parallel processing
+                        async def run_processing():
+                            insights = await process_all_agents_parallel(
+                                agents_data,
+                                coaching_themes,
+                                analysis_model,
+                                st.session_state.llm_provider,
+                                st.session_state.get('openrouter_api_key'),
+                                st.session_state.get('local_llm_url'),
+                                max_concurrent=max_concurrent,
+                                calls_per_minute=calls_per_minute
+                            )
+                            return insights
+                        
+                        import nest_asyncio
+                        nest_asyncio.apply()
+                        
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        
+                        try:
+                            status_text.text("Processing agents in parallel...")
+                            insights = loop.run_until_complete(run_processing())
+                            
+                            elapsed = time.time() - start_time
+                            
+                            progress_bar.progress(1.0)
+                            status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
+                            
+                            st.session_state.coaching_insights = insights
+                            st.session_state.processed = True
+                            
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Processing failed: {str(e)}")
+                        finally:
+                            loop.close()
+        
+        # Show coaching insights if available
+        if st.session_state.get('processed'):
+            st.markdown("---")
+            st.markdown("### 🎯 AI-Powered Coaching Insights")
+            
+            insights = st.session_state.coaching_insights
+            df = st.session_state.processed_df
+            
+            # Generate HTML report
+            html_report = generate_html_report(insights, df)
+            st.components.v1.html(html_report, height=2000, scrolling=True)
+            
+            st.session_state.html_report = html_report
+    
     else:
-        st.info("👆 Upload and process transcripts first!")
+        st.info("👆 Upload files and run pre-analysis first!")
 
 with tab3:
     if st.session_state.processed:
