@@ -247,74 +247,74 @@ if 'pre_analysis_done' not in st.session_state:
 MODELS = {
     "deepseek/deepseek-chat:free": {
         "name": "DeepSeek Chat",
-        "rating": "5/5",
+        "rating": "★★★★★",
         "best_for": "Advanced reasoning & analysis",
         "speed": "Fast",
         "recommended": True
     },
     "deepseek/deepseek-r1-distill-llama-70b:free": {
         "name": "DeepSeek R1 Distill",
-        "rating": "5/5",
+        "rating": "★★★★★",
         "best_for": "Deep reasoning on complex cases",
         "speed": "Medium"
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
         "name": "Llama 3.3 70B",
-        "rating": "5/5",
+        "rating": "★★★★★",
         "best_for": "Balanced performance & quality",
         "speed": "Medium"
     },
     "x-ai/grok-4.1-fast:free": {
         "name": "Grok 4.1 Fast",
-        "rating": "4/5",
+        "rating": "★★★★☆",
         "best_for": "Fast reasoning & insights",
         "speed": "Very Fast"
     },
     "google/gemma-3-27b-it:free": {
         "name": "Gemma 3 27B",
-        "rating": "4/5",
+        "rating": "★★★★☆",
         "best_for": "Google's efficient model",
         "speed": "Fast"
     },
     "qwen/qwen-2.5-72b-instruct:free": {
         "name": "Qwen 2.5 72B",
-        "rating": "4/5",
+        "rating": "★★★★☆",
         "best_for": "Structured analysis",
         "speed": "Fast"
     },
     "openai/gpt-oss-20b:free": {
         "name": "GPT OSS 20B",
-        "rating": "3/5",
+        "rating": "★★★☆☆",
         "best_for": "Basic coaching themes",
         "speed": "Fast"
     },
     "meituan/longcat-flash-chat:free": {
         "name": "LongCat Flash",
-        "rating": "3/5",
+        "rating": "★★★☆☆",
         "best_for": "Quick chat analysis",
         "speed": "Very Fast"
     },
     "microsoft/mai-ds-r1:free": {
         "name": "MAI DS R1",
-        "rating": "4/5",
+        "rating": "★★★★☆",
         "best_for": "Microsoft's reasoning model",
         "speed": "Medium"
     },
     "mistralai/mistral-7b-instruct:free": {
         "name": "Mistral 7B",
-        "rating": "3/5",
+        "rating": "★★★☆☆",
         "best_for": "Quick basic analysis",
         "speed": "Very Fast"
     },
     "gryphe/mythomax-l2-13b:free": {
         "name": "MythoMax L2 13B",
-        "rating": "3/5",
+        "rating": "★★★☆☆",
         "best_for": "Creative coaching suggestions",
         "speed": "Fast"
     },
     "mistralai/mistral-nemo:free": {
         "name": "Mistral Nemo",
-        "rating": "3/5",
+        "rating": "★★★☆☆",
         "best_for": "Fast Q&A chat",
         "speed": "Very Fast"
     }
@@ -2026,61 +2026,90 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
     prs.slide_width = Inches(10)
     prs.slide_height = Inches(7.5)
     
-    # Title slide
+    # Title slide - Clean professional design
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
     
-    # Add gradient background
+    # Modern blue background
     background = slide.background
     fill = background.fill
     fill.solid()
-    fill.fore_color.rgb = RGBColor(102, 126, 234)
+    fill.fore_color.rgb = RGBColor(14, 165, 233)  # Sky blue
     
     # Title
-    title_box = slide.shapes.add_textbox(Inches(1), Inches(2.5), Inches(8), Inches(1))
+    title_box = slide.shapes.add_textbox(Inches(1.5), Inches(2.5), Inches(7), Inches(1.2))
     title_frame = title_box.text_frame
     title_frame.text = "QA Coaching Intelligence Report"
     title_para = title_frame.paragraphs[0]
-    title_para.font.size = Pt(48)
+    title_para.font.size = Pt(44)
     title_para.font.bold = True
     title_para.font.color.rgb = RGBColor(255, 255, 255)
     title_para.alignment = PP_ALIGN.CENTER
     
     # Subtitle
-    subtitle_box = slide.shapes.add_textbox(Inches(1), Inches(4), Inches(8), Inches(0.5))
+    subtitle_box = slide.shapes.add_textbox(Inches(1.5), Inches(4), Inches(7), Inches(0.6))
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = f"Generated on {datetime.now().strftime('%B %d, %Y')}"
     subtitle_para = subtitle_frame.paragraphs[0]
-    subtitle_para.font.size = Pt(20)
-    subtitle_para.font.color.rgb = RGBColor(255, 255, 255)
+    subtitle_para.font.size = Pt(18)
+    subtitle_para.font.color.rgb = RGBColor(240, 248, 255)
     subtitle_para.alignment = PP_ALIGN.CENTER
     
-    # Key findings slide
+    # Key findings slide - Professional bullet layout
     slide = prs.slides.add_slide(prs.slide_layouts[5])  # Title only
     title = slide.shapes.title
-    title.text = "Key Findings"
+    title.text = "Executive Summary"
+    title.text_frame.paragraphs[0].font.size = Pt(36)
+    title.text_frame.paragraphs[0].font.bold = True
+    title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
     
     total_calls = len(df['call_id'].unique()) if 'call_id' in df.columns else len(df)
     total_agents = len(insights)
     total_themes = sum(len(agent_data.get('coaching_themes', [])) for agent_data in insights.values())
     
-    # Add metrics
-    metrics_text = f"""
-    ✓ Analyzed {total_calls} calls
-    ✓ Reviewed {total_agents} agents
-    ✓ Identified {total_themes} coaching opportunities
-    """
-    
-    text_box = slide.shapes.add_textbox(Inches(2), Inches(2), Inches(6), Inches(3))
+    # Professional metrics box
+    text_box = slide.shapes.add_textbox(Inches(1.5), Inches(2), Inches(7), Inches(4))
     text_frame = text_box.text_frame
-    text_frame.text = metrics_text
-    for para in text_frame.paragraphs:
-        para.font.size = Pt(28)
-        para.space_before = Pt(20)
+    text_frame.word_wrap = True
     
-    # 5C Framework Overview Slide
+    # Add bullet points professionally
+    p = text_frame.paragraphs[0]
+    p.text = f"Analyzed {total_calls:,} customer calls across the organization"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = f"Evaluated performance of {total_agents} customer service agents"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = f"Identified {total_themes} targeted coaching opportunities for improvement"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = "AI-powered analysis using advanced language models"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    
+    # 5C Framework Overview Slide - Clean presentation
     slide = prs.slides.add_slide(prs.slide_layouts[5])
     title = slide.shapes.title
-    title.text = "🎯 5C Coaching Framework"
+    title.text = "5C Coaching Framework Analysis"
+    title.text_frame.paragraphs[0].font.size = Pt(36)
+    title.text_frame.paragraphs[0].font.bold = True
+    title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
     
     # Calculate 5C scores per agent
     agent_5c_scores = {}
@@ -2099,73 +2128,104 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
         
         agent_5c_scores[agent_name] = c_scores
     
-    # Add 5C summary
-    y_pos = 2
-    for c_name, icon in FIVE_C_ICONS.items():
+    # Add 5C summary - professional table-like layout
+    text_box = slide.shapes.add_textbox(Inches(1.5), Inches(2), Inches(7), Inches(4.5))
+    text_frame = text_box.text_frame
+    text_frame.word_wrap = True
+    
+    for c_name in FIVE_C_ICONS.keys():
         agent_scores = [(agent, scores[c_name]) for agent, scores in agent_5c_scores.items()]
-        top_agents = sorted(agent_scores, key=lambda x: x[1], reverse=True)[:3]
         agents_needing_help = len([a for a, s in agent_scores if s > 0])
         
-        text_box = slide.shapes.add_textbox(Inches(1.5), Inches(y_pos), Inches(7), Inches(0.8))
-        text_frame = text_box.text_frame
-        text_frame.text = f"{icon} {c_name}: {agents_needing_help} agents need support"
-        para = text_frame.paragraphs[0]
-        para.font.size = Pt(20)
-        para.font.bold = True
-        
-        y_pos += 0.9
+        p = text_frame.add_paragraph() if c_name != "Connection" else text_frame.paragraphs[0]
+        p.text = f"{c_name}: {agents_needing_help} agents requiring coaching support"
+        p.level = 0
+        p.font.size = Pt(22)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(51, 65, 85)
+        p.space_before = Pt(18)
+        p.space_after = Pt(8)
     
-    # Agent slides (limit to 10)
+    # Agent slides (limit to 10) - Clean professional design
     for agent_name, agent_data in list(insights.items())[:10]:
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         title = slide.shapes.title
-        title.text = f"👤 {agent_name}"
+        title.text = f"Agent Profile: {agent_name}"
+        title.text_frame.paragraphs[0].font.size = Pt(32)
+        title.text_frame.paragraphs[0].font.bold = True
+        title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
         
         # Agent's 5C scores
         agent_scores = agent_5c_scores.get(agent_name, {})
         
-        # Add 5C breakdown
-        y_pos = 2
-        text_box = slide.shapes.add_textbox(Inches(1), Inches(y_pos), Inches(4), Inches(0.5))
+        # Left column - 5C breakdown
+        text_box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(4), Inches(4))
         text_frame = text_box.text_frame
-        text_frame.text = "5C Framework Scores:"
-        text_frame.paragraphs[0].font.size = Pt(18)
-        text_frame.paragraphs[0].font.bold = True
+        text_frame.word_wrap = True
         
-        y_pos += 0.6
+        p = text_frame.paragraphs[0]
+        p.text = "Framework Analysis:"
+        p.font.size = Pt(20)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(14, 165, 233)
+        p.space_after = Pt(16)
+        
         for c_name, score in agent_scores.items():
             if score > 0:
-                icon = FIVE_C_ICONS[c_name]
-                text_box = slide.shapes.add_textbox(Inches(1.2), Inches(y_pos), Inches(3.5), Inches(0.4))
-                text_frame = text_box.text_frame
-                text_frame.text = f"{icon} {c_name}: {score} issues"
-                text_frame.paragraphs[0].font.size = Pt(16)
-                y_pos += 0.5
+                p = text_frame.add_paragraph()
+                p.text = f"{c_name}: {score} coaching points"
+                p.level = 0
+                p.font.size = Pt(16)
+                p.font.color.rgb = RGBColor(71, 85, 105)
+                p.space_before = Pt(8)
+                p.space_after = Pt(8)
         
-        # Top themes
+        # Right column - Top themes
         themes = agent_data.get('coaching_themes', [])[:3]
         
-        y_pos = 2
-        theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(0.5))
+        theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(2), Inches(4), Inches(4.5))
         theme_frame = theme_box.text_frame
-        theme_frame.text = "Top Coaching Needs:"
-        theme_frame.paragraphs[0].font.size = Pt(18)
-        theme_frame.paragraphs[0].font.bold = True
+        theme_frame.word_wrap = True
         
-        y_pos += 0.6
+        p = theme_frame.paragraphs[0]
+        p.text = "Priority Coaching Areas:"
+        p.font.size = Pt(20)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(14, 165, 233)
+        p.space_after = Pt(16)
+        
         for idx, theme in enumerate(themes, 1):
-            theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(1))
-            theme_frame = theme_box.text_frame
+            # Theme name
+            p = theme_frame.add_paragraph()
+            p.text = f"{idx}. {theme.get('theme', '')}"
+            p.level = 0
+            p.font.size = Pt(16)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(30, 41, 59)
+            p.space_before = Pt(12)
+            p.space_after = Pt(4)
             
-            theme_frame.text = f"{idx}. {theme.get('theme', '')}"
-            theme_para = theme_frame.paragraphs[0]
-            theme_para.font.size = Pt(16)
-            theme_para.font.bold = True
-            
+            # Priority
             priority = theme.get('priority', 'low')
-            priority_text = theme_frame.add_paragraph()
-            priority_text.text = f"Priority: {priority.upper()}"
-            priority_text.font.size = Pt(14)
+            priority_color = RGBColor(220, 38, 38) if priority == 'high' else RGBColor(245, 158, 11) if priority == 'medium' else RGBColor(16, 185, 129)
+            
+            p = theme_frame.add_paragraph()
+            p.text = f"Priority Level: {priority.upper()}"
+            p.level = 1
+            p.font.size = Pt(13)
+            p.font.color.rgb = priority_color
+            p.space_after = Pt(2)
+            
+            # Recommendation
+            recommendation = theme.get('recommendation', '')[:120]
+            if recommendation:
+                p = theme_frame.add_paragraph()
+                p.text = f"{recommendation}..."
+                p.level = 1
+                p.font.size = Pt(12)
+                p.font.italic = True
+                p.font.color.rgb = RGBColor(100, 116, 139)
+                p.space_after = Pt(8)
             
             if priority == 'high':
                 priority_text.font.color.rgb = RGBColor(245, 87, 108)
@@ -2291,7 +2351,7 @@ with st.sidebar:
         analysis_model = st.selectbox(
             "Select model:",
             options=list(MODELS.keys()),
-            format_func=lambda x: f"[{MODELS[x]['rating']}] {MODELS[x]['name']}" + (" (Recommended)" if MODELS[x].get('recommended') else ""),
+            format_func=lambda x: f"{MODELS[x]['rating']} {MODELS[x]['name']}" + (" (Recommended)" if MODELS[x].get('recommended') else ""),
             index=0
         )
         st.info(f"**Best for:** {MODELS[analysis_model]['best_for']}\n\n**Speed:** {MODELS[analysis_model]['speed']}")
@@ -2436,12 +2496,12 @@ st.markdown("""
             </svg>
         </div>
         <h1 style='font-size: 3rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0;'>QA Coaching Intelligence</h1>
-        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Customer Interaction into Coaching Excellence</p>
+        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Call into Coaching Excellence</p>
     </div>
 """, unsafe_allow_html=True)
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Process", "📊 Dashboard", "💬 Q&A Chat", "💾 Export & Session"])
+tab1, tab2, tab3, tab4 = st.tabs(["Upload & Process", "Dashboard", "Q&A Chat", "Export & Session"])
 
 with tab1:
     st.markdown("<div style='background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; margin: 20px 0;'>", unsafe_allow_html=True)
@@ -3041,7 +3101,7 @@ with tab3:
             chat_model = st.selectbox(
                 "Chat model:",
                 options=list(MODELS.keys()),
-                format_func=lambda x: f"[{MODELS[x]['rating']}] {MODELS[x]['name']}",
+                format_func=lambda x: f"{MODELS[x]['rating']} {MODELS[x]['name']}",
                 index=list(MODELS.keys()).index("mistralai/mistral-nemo:free")
             )
         
@@ -3327,27 +3387,40 @@ with tab4:
                     'content': json.dumps(st.session_state.coaching_insights)
                 }])
                 
-                parquet_bytes = convert_to_parquet(session_df, 'session.parquet')
-                
-                st.download_button(
-                    "📥 Download Session File",
-                    data=parquet_bytes,
-                    file_name=f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet",
-                    mime="application/octet-stream",
-                    use_container_width=True
-                )
+                # Get latest session file
+                file_hash = st.session_state.get('file_hash')
+                if file_hash:
+                    sessions_dir = get_sessions_dir()
+                    matching_sessions = list(sessions_dir.glob(f"session_{file_hash}_*.pkl"))
+                    
+                    if matching_sessions:
+                        latest_session_file = max(matching_sessions, key=lambda p: p.stat().st_mtime)
+                        
+                        with open(latest_session_file, 'rb') as f:
+                            session_bytes = f.read()
+                        
+                        st.download_button(
+                            "Download Session File",
+                            data=session_bytes,
+                            file_name=f"coaching_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl",
+                            mime="application/octet-stream",
+                            use_container_width=True
+                        )
+                    else:
+                        st.warning("No session found. Run analysis first.")
+                else:
+                    st.warning("No session available. Run analysis first.")
         
         with col2:
-            session_file = st.file_uploader("📂 Load Session", type=['parquet'])
+            session_file = st.file_uploader("Load Session", type=['pkl'])
             if session_file:
-                # Load session
-                session_df = pd.read_parquet(session_file)
-                if not session_df.empty:
-                    content = json.loads(session_df.iloc[0]['content'])
-                    st.session_state.coaching_insights = content
-                    st.session_state.processed = True
-                    st.success("✅ Session loaded!")
-                    st.rerun()
+                # Load pickle session
+                session_data = pickle.load(session_file)
+                st.session_state.coaching_insights = session_data['insights']
+                st.session_state.processed = True
+                st.session_state.file_hash = session_data['file_hash']
+                st.success("Session loaded successfully!")
+                st.rerun()
     
     else:
         st.info("👆 Process transcripts first!")
