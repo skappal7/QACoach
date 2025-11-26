@@ -1087,7 +1087,7 @@ def merge_insights(old_insights: Dict, new_insights: Dict) -> Dict:
     merged.update(new_insights)
     return merged
 
-def generate_analytics_context(insights: Dict, df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> str:
+def generate_analytics_context(insights: Dict, df: pd.DataFrame) -> str:
     """Generate text context for enhanced chat with DuckDB analytics"""
     
     total_agents = len(insights)
@@ -1142,7 +1142,7 @@ You can answer questions about:
     
     return context
 
-def generate_executive_summary(insights: Dict, df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> str:
+def generate_executive_summary(insights: Dict, df: pd.DataFrame) -> str:
     """Generate executive summary section for HTML report"""
     
     total_agents = len(insights)
@@ -1552,7 +1552,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                 </div>
             </div>
             
-            {generate_executive_summary(insights, df, conn)}
+            {generate_executive_summary(insights, df)}
             
             <h2 class="section-title">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2314,8 +2314,7 @@ with st.sidebar:
                     st.session_state.processed = True
                     st.session_state.analytics_context = generate_analytics_context(
                         existing_session['insights'],
-                        st.session_state.processed_df,
-                        st.session_state.duckdb_conn
+                        st.session_state.processed_df
                     )
                     st.rerun()
             with col2:
@@ -2368,7 +2367,7 @@ with st.sidebar:
 
 # Main content
 st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #1e293b;'>QA Coaching Intelligence</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #ffffff;'>QA Coaching Intelligence</h1>", unsafe_allow_html=True)
 st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2854,7 +2853,7 @@ with tab2:
                                 st.success(f"Cached {len(cache_rows)} coaching insights for future queries")
                             
                             # Generate analytics context for chat
-                            st.session_state.analytics_context = generate_analytics_context(all_insights, df, conn)
+                            st.session_state.analytics_context = generate_analytics_context(all_insights, df)
                             
                             st.session_state.coaching_insights = all_insights
                             st.session_state.processed = True
@@ -3183,5 +3182,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Developed by CE Innovations Lab 2025", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
