@@ -42,7 +42,7 @@ st.markdown("""
     }
     
     .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #ffffff;
         background-attachment: fixed;
     }
     
@@ -2210,10 +2210,27 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### QA Coaching Intelligence")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 20px;'>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <h3 style='margin: 0; color: #1e293b;'>QA Coaching Intelligence</h3>
+        </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
     
-    st.markdown("#### LLM Provider")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>LLM Provider</h4>
+        </div>
+    """, unsafe_allow_html=True)
     llm_provider = st.radio(
         "Select provider:",
         ["OpenRouter", "Local LLM (LM Studio/Ollama)"],
@@ -2252,7 +2269,23 @@ with st.sidebar:
         st.info("💡 Make sure LM Studio or Ollama is running")
     
     st.markdown("---")
-    st.markdown("#### Analysis Model")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="3"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Analysis Model</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     if st.session_state.llm_provider == "openrouter":
         analysis_model = st.selectbox(
@@ -2270,7 +2303,15 @@ with st.sidebar:
         )
     
     st.markdown("---")
-    st.markdown("#### Processing Settings")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m5.656-14.656l-4.242 4.242m-2.828 2.828l-4.242 4.242M23 12h-6m-6 0H1m17.656 5.656l-4.242-4.242m-2.828-2.828l-4.242-4.242"></path>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Processing Settings</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     max_concurrent = st.slider(
         "Concurrent requests:",
@@ -2292,7 +2333,16 @@ with st.sidebar:
     
     # Session Management
     st.markdown("---")
-    st.markdown("#### Session Management")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Session Management</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     # Check for existing session if data is loaded
     if st.session_state.get('processed_df') is not None:
@@ -2347,7 +2397,18 @@ with st.sidebar:
             st.caption("No saved sessions")
     
     st.markdown("---")
-    st.markdown("#### Coaching Themes")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Coaching Themes</h4>
+        </div>
+    """, unsafe_allow_html=True)
     theme_option = st.radio("Theme source:", ["Pre-loaded", "Custom", "Both"])
     
     if theme_option == "Custom":
@@ -2366,10 +2427,18 @@ with st.sidebar:
     st.caption(f"{len(coaching_themes)} themes active")
 
 # Main content
-st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #0b5394;'>QA Coaching Intelligence</h1>", unsafe_allow_html=True)
-st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("""
+    <div style='text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-radius: 20px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
+        <div style='display: flex; justify-content: center; margin-bottom: 20px;'>
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+            </svg>
+        </div>
+        <h1 style='font-size: 3rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0;'>QA Coaching Intelligence</h1>
+        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Call into Coaching Excellence</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Process", "📊 Dashboard", "💬 Q&A Chat", "💾 Export & Session"])
@@ -2377,7 +2446,16 @@ tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Process", "📊 Dashboard", "�
 with tab1:
     st.markdown("<div style='background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; margin: 20px 0;'>", unsafe_allow_html=True)
     
-    st.markdown("### 📤 Step 1: Upload Files")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h3 style='margin: 0; color: #1e293b;'>Step 1: Upload Files</h3>
+        </div>
+    """, unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
         "Supported: CSV, XLSX, XLS, TXT, Parquet",
         type=['csv', 'xlsx', 'xls', 'txt', 'parquet'],
@@ -2415,7 +2493,16 @@ with tab1:
     
     if st.session_state.get('data_loaded'):
         st.markdown("---")
-        st.markdown("### 🗂️ Step 2: Map Columns")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Step 2: Map Columns</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         df = st.session_state.raw_df
         available_columns = list(df.columns)
@@ -2423,19 +2510,46 @@ with tab1:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("#### Required Fields")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Required Fields</h4>
+                </div>
+            """, unsafe_allow_html=True)
             call_id_col = st.selectbox("Call ID column:", [""] + available_columns, key="call_id_col")
             agent_col = st.selectbox("Agent column:", [""] + available_columns, key="agent_col")
             transcript_col = st.selectbox("Transcript column:", [""] + available_columns, key="transcript_col")
         
         with col2:
-            st.markdown("#### Optional Fields")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Optional Fields</h4>
+                </div>
+            """, unsafe_allow_html=True)
             sentiment_col = st.selectbox("Sentiment Score:", ["None"] + available_columns, key="sentiment_col")
             timestamp_col = st.selectbox("Timestamp:", ["None"] + available_columns, key="timestamp_col")
             duration_col = st.selectbox("Call Duration:", ["None"] + available_columns, key="duration_col")
         
         with col3:
-            st.markdown("#### Additional Metrics")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Additional Metrics</h4>
+                </div>
+            """, unsafe_allow_html=True)
             custom_cols = st.multiselect(
                 "Other columns to include:",
                 [c for c in available_columns if c not in [call_id_col, agent_col, transcript_col, sentiment_col, timestamp_col, duration_col]],
@@ -2622,7 +2736,16 @@ with tab2:
     if st.session_state.get('pre_analysis_done'):
         analytics = st.session_state.pre_analytics
         
-        st.markdown("### 📊 Pre-Analysis Dashboard (DuckDB)")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Pre-Analysis Dashboard (DuckDB)</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -2643,7 +2766,17 @@ with tab2:
         st.markdown("---")
         
         # Agent performance table
-        st.markdown("#### 👥 Agent Statistics")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin: 15px 0;'>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <h4 style='margin: 0; color: #1e293b;'>Agent Statistics</h4>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Merge stats
         display_df = analytics['agent_stats'].copy()
@@ -2677,7 +2810,15 @@ with tab2:
         
         # Coaching insights section
         if not st.session_state.get('processed'):
-            st.markdown("### 🎯 Generate Coaching Insights")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <h3 style='margin: 0; color: #1e293b;'>Generate Coaching Insights</h3>
+                </div>
+            """, unsafe_allow_html=True)
             st.info("📌 Pre-analysis complete! Now optionally generate AI-powered coaching themes.")
             
             # Validation
@@ -2863,7 +3004,14 @@ with tab2:
         # Show coaching insights if available
         if st.session_state.get('processed'):
             st.markdown("---")
-            st.markdown("### 🎯 AI-Powered Coaching Insights")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 20px;'>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    <h3 style='margin: 0; color: #1e293b;'>AI-Powered Coaching Insights</h3>
+                </div>
+            """, unsafe_allow_html=True)
             
             insights = st.session_state.coaching_insights
             df = st.session_state.processed_df
@@ -2879,7 +3027,14 @@ with tab2:
 
 with tab3:
     if st.session_state.processed:
-        st.markdown("### 💬 Ask Questions About Your Data")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Ask Questions About Your Data</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Chat model selector
         with st.expander("⚙️ Chat Settings"):
@@ -3025,7 +3180,16 @@ Detailed Coaching Insights:
 
 with tab4:
     if st.session_state.processed:
-        st.markdown("### 📥 Download Reports")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Download Reports</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
         
@@ -3124,7 +3288,16 @@ with tab4:
                     )
         
         st.markdown("---")
-        st.markdown("### 💾 Session Management")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Session Management</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         
