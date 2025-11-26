@@ -1017,59 +1017,69 @@ def calculate_file_hash(df: pd.DataFrame) -> str:
 def get_sessions_dir() -> Path:
     """Get or create sessions directory"""
     sessions_dir = Path("/mnt/user-data/outputs/sessions")
-    sessions_dir.mkdir(exist_ok=True)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
     return sessions_dir
 
 def save_session(file_hash: str, insights: Dict, filter_criteria: Dict, model_used: str):
     """Save session to file"""
-    sessions_dir = get_sessions_dir()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_file = sessions_dir / f"session_{file_hash}_{timestamp}.pkl"
-    
-    session_data = {
-        'file_hash': file_hash,
-        'timestamp': datetime.now().isoformat(),
-        'insights': insights,
-        'filter_criteria': filter_criteria,
-        'model_used': model_used,
-        'agent_names': list(insights.keys())
-    }
-    
-    with open(session_file, 'wb') as f:
-        pickle.dump(session_data, f)
-    
-    return session_file
+    try:
+        sessions_dir = get_sessions_dir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_file = sessions_dir / f"session_{file_hash}_{timestamp}.pkl"
+        
+        session_data = {
+            'file_hash': file_hash,
+            'timestamp': datetime.now().isoformat(),
+            'insights': insights,
+            'filter_criteria': filter_criteria,
+            'model_used': model_used,
+            'agent_names': list(insights.keys())
+        }
+        
+        with open(session_file, 'wb') as f:
+            pickle.dump(session_data, f)
+        
+        return session_file
+    except Exception as e:
+        print(f"Failed to save session: {e}")
+        return None
 
 def load_latest_session(file_hash: str) -> Dict:
     """Load most recent session for a given file hash"""
-    sessions_dir = get_sessions_dir()
-    matching_sessions = list(sessions_dir.glob(f"session_{file_hash}_*.pkl"))
-    
-    if not matching_sessions:
+    try:
+        sessions_dir = get_sessions_dir()
+        matching_sessions = list(sessions_dir.glob(f"session_{file_hash}_*.pkl"))
+        
+        if not matching_sessions:
+            return None
+        
+        # Get most recent
+        latest_session = max(matching_sessions, key=lambda p: p.stat().st_mtime)
+        
+        with open(latest_session, 'rb') as f:
+            return pickle.load(f)
+    except:
         return None
-    
-    # Get most recent
-    latest_session = max(matching_sessions, key=lambda p: p.stat().st_mtime)
-    
-    with open(latest_session, 'rb') as f:
-        return pickle.load(f)
 
 def list_all_sessions() -> List[Dict]:
     """List all available sessions"""
-    sessions_dir = get_sessions_dir()
-    sessions = []
-    
-    for session_file in sessions_dir.glob("session_*.pkl"):
-        try:
-            with open(session_file, 'rb') as f:
-                session_data = pickle.load(f)
-                session_data['filename'] = session_file.name
-                session_data['filepath'] = str(session_file)
-                sessions.append(session_data)
-        except:
-            continue
-    
-    return sorted(sessions, key=lambda x: x['timestamp'], reverse=True)
+    try:
+        sessions_dir = get_sessions_dir()
+        sessions = []
+        
+        for session_file in sessions_dir.glob("session_*.pkl"):
+            try:
+                with open(session_file, 'rb') as f:
+                    session_data = pickle.load(f)
+                    session_data['filename'] = session_file.name
+                    session_data['filepath'] = str(session_file)
+                    sessions.append(session_data)
+            except:
+                continue
+        
+        return sorted(sessions, key=lambda x: x['timestamp'], reverse=True)
+    except:
+        return []
 
 def merge_insights(old_insights: Dict, new_insights: Dict) -> Dict:
     """Merge old and new coaching insights"""
