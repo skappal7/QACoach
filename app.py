@@ -2011,7 +2011,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <div class="footer">
-                <p>QA Coaching Intelligence Platform | Powered by AI Analytics</p>
+                <p>QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025</p>
             </div>
         </div>
     </body>
