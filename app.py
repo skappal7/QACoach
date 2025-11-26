@@ -2436,7 +2436,7 @@ st.markdown("""
             </svg>
         </div>
         <h1 style='font-size: 3rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0;'>QA Coaching Intelligence</h1>
-        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Call into Coaching Excellence</p>
+        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Customer Interaction into Coaching Excellence</p>
     </div>
 """, unsafe_allow_html=True)
 
