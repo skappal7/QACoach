@@ -18,12 +18,16 @@ import asyncio
 import aiohttp
 from asyncio import Semaphore
 import time
+import hashlib
+import pickle
+from pathlib import Path
+import os
 from collections import deque
 
 # Page config
 st.set_page_config(
     page_title="QA Coaching Intelligence",
-    page_icon="🎯",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -38,7 +42,7 @@ st.markdown("""
     }
     
     .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #ffffff;
         background-attachment: fixed;
     }
     
@@ -243,74 +247,74 @@ if 'pre_analysis_done' not in st.session_state:
 MODELS = {
     "deepseek/deepseek-chat:free": {
         "name": "DeepSeek Chat",
-        "stars": "⭐⭐⭐⭐⭐",
+        "rating": "★★★★★",
         "best_for": "Advanced reasoning & analysis",
         "speed": "Fast",
         "recommended": True
     },
     "deepseek/deepseek-r1-distill-llama-70b:free": {
         "name": "DeepSeek R1 Distill",
-        "stars": "⭐⭐⭐⭐⭐",
+        "rating": "★★★★★",
         "best_for": "Deep reasoning on complex cases",
         "speed": "Medium"
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
         "name": "Llama 3.3 70B",
-        "stars": "⭐⭐⭐⭐⭐",
+        "rating": "★★★★★",
         "best_for": "Balanced performance & quality",
         "speed": "Medium"
     },
     "x-ai/grok-4.1-fast:free": {
         "name": "Grok 4.1 Fast",
-        "stars": "⭐⭐⭐⭐",
+        "rating": "★★★★☆",
         "best_for": "Fast reasoning & insights",
         "speed": "Very Fast"
     },
     "google/gemma-3-27b-it:free": {
         "name": "Gemma 3 27B",
-        "stars": "⭐⭐⭐⭐",
+        "rating": "★★★★☆",
         "best_for": "Google's efficient model",
         "speed": "Fast"
     },
     "qwen/qwen-2.5-72b-instruct:free": {
         "name": "Qwen 2.5 72B",
-        "stars": "⭐⭐⭐⭐",
+        "rating": "★★★★☆",
         "best_for": "Structured analysis",
         "speed": "Fast"
     },
     "openai/gpt-oss-20b:free": {
         "name": "GPT OSS 20B",
-        "stars": "⭐⭐⭐",
+        "rating": "★★★☆☆",
         "best_for": "Basic coaching themes",
         "speed": "Fast"
     },
     "meituan/longcat-flash-chat:free": {
         "name": "LongCat Flash",
-        "stars": "⭐⭐⭐",
+        "rating": "★★★☆☆",
         "best_for": "Quick chat analysis",
         "speed": "Very Fast"
     },
     "microsoft/mai-ds-r1:free": {
         "name": "MAI DS R1",
-        "stars": "⭐⭐⭐⭐",
+        "rating": "★★★★☆",
         "best_for": "Microsoft's reasoning model",
         "speed": "Medium"
     },
     "mistralai/mistral-7b-instruct:free": {
         "name": "Mistral 7B",
-        "stars": "⭐⭐⭐",
+        "rating": "★★★☆☆",
         "best_for": "Quick basic analysis",
         "speed": "Very Fast"
     },
     "gryphe/mythomax-l2-13b:free": {
         "name": "MythoMax L2 13B",
-        "stars": "⭐⭐⭐",
+        "rating": "★★★☆☆",
         "best_for": "Creative coaching suggestions",
         "speed": "Fast"
     },
     "mistralai/mistral-nemo:free": {
         "name": "Mistral Nemo",
-        "stars": "⭐⭐⭐",
+        "rating": "★★★☆☆",
         "best_for": "Fast Q&A chat",
         "speed": "Very Fast"
     }
@@ -943,13 +947,13 @@ def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
     text_body = f"""COACHING PLAN FOR {agent_name.upper()}
 {'=' * 60}
 
-📊 SUMMARY
+SUMMARY
    • Calls Analyzed: {calls}
    • Date Generated: {datetime.now().strftime('%B %d, %Y')}
 
 {'=' * 60}
 
-🎯 COACHING THEMES
+COACHING THEMES
 """
     
     for idx, theme in enumerate(themes, 1):
@@ -959,22 +963,22 @@ def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
         examples = theme.get('examples', [])
         
         priority_label = {
-            'high': '🔴 HIGH PRIORITY',
-            'medium': '🟡 MEDIUM PRIORITY',
-            'low': '🟢 LOW PRIORITY'
-        }.get(priority, 'LOW')
+            'high': '[HIGH PRIORITY]',
+            'medium': '[MEDIUM PRIORITY]',
+            'low': '[LOW PRIORITY]'
+        }.get(priority, '[LOW]')
         
         text_body += f"""
 {idx}. {theme_name.upper()}
    Priority: {priority_label}
    
-   💡 Recommendation:
+   Recommendation:
    {recommendation}
 """
         
         if examples:
             text_body += f"""   
-   📝 Examples:
+   Examples:
 """
             for ex in examples[:2]:
                 text_body += f"   • {ex}\n"
@@ -984,7 +988,7 @@ def generate_email_share_link(agent_name: str, agent_data: Dict) -> str:
     # Strengths
     if strengths:
         text_body += f"""
-✨ STRENGTHS
+STRENGTHS
 """
         for strength in strengths:
             text_body += f"   • {strength}\n"
@@ -1002,6 +1006,235 @@ Generated by QA Coaching Intelligence Platform
     mailto_link = f"mailto:?subject={urllib.parse.quote(subject)}&body={body_encoded}"
     
     return mailto_link
+
+# Session Management Functions
+def calculate_file_hash(df: pd.DataFrame) -> str:
+    """Calculate hash of DataFrame for session identification"""
+    # Use first 100 rows + column names for hash (fast, representative)
+    sample = df.head(100).to_csv(index=False)
+    return hashlib.md5(sample.encode()).hexdigest()[:12]
+
+def get_sessions_dir() -> Path:
+    """Get or create sessions directory"""
+    sessions_dir = Path("/mnt/user-data/outputs/sessions")
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    return sessions_dir
+
+def save_session(file_hash: str, insights: Dict, filter_criteria: Dict, model_used: str):
+    """Save session to file"""
+    try:
+        sessions_dir = get_sessions_dir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_file = sessions_dir / f"session_{file_hash}_{timestamp}.pkl"
+        
+        session_data = {
+            'file_hash': file_hash,
+            'timestamp': datetime.now().isoformat(),
+            'insights': insights,
+            'filter_criteria': filter_criteria,
+            'model_used': model_used,
+            'agent_names': list(insights.keys())
+        }
+        
+        with open(session_file, 'wb') as f:
+            pickle.dump(session_data, f)
+        
+        return session_file
+    except Exception as e:
+        print(f"Failed to save session: {e}")
+        return None
+
+def load_latest_session(file_hash: str) -> Dict:
+    """Load most recent session for a given file hash"""
+    try:
+        sessions_dir = get_sessions_dir()
+        matching_sessions = list(sessions_dir.glob(f"session_{file_hash}_*.pkl"))
+        
+        if not matching_sessions:
+            return None
+        
+        # Get most recent
+        latest_session = max(matching_sessions, key=lambda p: p.stat().st_mtime)
+        
+        with open(latest_session, 'rb') as f:
+            return pickle.load(f)
+    except:
+        return None
+
+def list_all_sessions() -> List[Dict]:
+    """List all available sessions"""
+    try:
+        sessions_dir = get_sessions_dir()
+        sessions = []
+        
+        for session_file in sessions_dir.glob("session_*.pkl"):
+            try:
+                with open(session_file, 'rb') as f:
+                    session_data = pickle.load(f)
+                    session_data['filename'] = session_file.name
+                    session_data['filepath'] = str(session_file)
+                    sessions.append(session_data)
+            except:
+                continue
+        
+        return sorted(sessions, key=lambda x: x['timestamp'], reverse=True)
+    except:
+        return []
+
+def merge_insights(old_insights: Dict, new_insights: Dict) -> Dict:
+    """Merge old and new coaching insights"""
+    merged = old_insights.copy()
+    merged.update(new_insights)
+    return merged
+
+def generate_analytics_context(insights: Dict, df: pd.DataFrame) -> str:
+    """Generate text context for enhanced chat with DuckDB analytics"""
+    
+    total_agents = len(insights)
+    total_calls = df['call_id'].nunique() if 'call_id' in df.columns else 0
+    
+    # Theme analysis
+    theme_counts = {}
+    priority_dist = {'high': 0, 'medium': 0, 'low': 0}
+    
+    for agent_data in insights.values():
+        for theme in agent_data.get('coaching_themes', []):
+            theme_name = theme.get('theme', '')
+            theme_counts[theme_name] = theme_counts.get(theme_name, 0) + 1
+            priority_dist[theme.get('priority', 'low')] += 1
+    
+    top_3_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)[:3] if theme_counts else []
+    
+    # Sentiment analysis if available
+    avg_sentiment = df['sentiment_score'].mean() if 'sentiment_score' in df.columns else 0
+    
+    context = f"""
+COACHING ANALYTICS CONTEXT:
+
+Dataset Overview:
+- Total Agents Analyzed: {total_agents}
+- Total Calls: {total_calls:,}
+- Average Sentiment: {avg_sentiment:.2f}/5.0
+
+Theme Distribution:
+"""
+    
+    if top_3_themes:
+        for idx, (theme, count) in enumerate(top_3_themes, 1):
+            context += f"- #{idx} Theme: {theme} ({count} agents, {count/total_agents*100:.1f}%)\n"
+    
+    context += f"""
+Priority Breakdown:
+- High Priority: {priority_dist['high']} themes requiring immediate attention
+- Medium Priority: {priority_dist['medium']} themes
+- Low Priority: {priority_dist['low']} themes
+
+Available DuckDB Tables:
+- transcripts: call_id, agent, speaker, message, sentiment_score, timestamp
+- coaching_cache: agent, theme, priority, frequency, recommendation, processed_at
+
+You can answer questions about:
+- Agent performance comparisons
+- Theme correlations and patterns
+- Sentiment analysis by agent or theme
+- Call volume and engagement metrics
+"""
+    
+    return context
+
+def generate_executive_summary(insights: Dict, df: pd.DataFrame) -> str:
+    """Generate executive summary section for HTML report"""
+    
+    total_agents = len(insights)
+    total_calls = df['call_id'].nunique() if 'call_id' in df.columns else 0
+    
+    # Theme analysis
+    theme_counts = {}
+    priority_dist = {'high': 0, 'medium': 0, 'low': 0}
+    
+    for agent_data in insights.values():
+        for theme in agent_data.get('coaching_themes', []):
+            theme_name = theme.get('theme', '')
+            theme_counts[theme_name] = theme_counts.get(theme_name, 0) + 1
+            priority_dist[theme.get('priority', 'low')] += 1
+    
+    top_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)[:3] if theme_counts else []
+    
+    # 5C scores
+    c_needs = {}
+    for agent_name, agent_data in insights.items():
+        themes = agent_data.get('coaching_themes', [])
+        for theme in themes:
+            theme_name = theme.get('theme', '')
+            for c, theme_list in THEME_TO_5C.items():
+                if any(t.lower() in theme_name.lower() for t in theme_list):
+                    c_needs[c] = c_needs.get(c, 0) + 1
+    
+    top_c = max(c_needs.items(), key=lambda x: x[1])[0] if c_needs else "Connection"
+    
+    # Sentiment
+    avg_sentiment = df['sentiment_score'].mean() if 'sentiment_score' in df.columns else 0
+    
+    # Agent segmentation
+    high_need = sum(1 for a in insights.values() if len(a.get('coaching_themes', [])) >= 4)
+    moderate = sum(1 for a in insights.values() if 2 <= len(a.get('coaching_themes', [])) < 4)
+    high_perf = total_agents - high_need - moderate
+    
+    # Generate summary HTML
+    summary = f"""
+<div style="background: #f8fafc; border-left: 4px solid #0ea5e9; padding: 24px; margin-bottom: 40px; border-radius: 8px;">
+    <h2 style="color: #1e293b; margin-top: 0; display: flex; align-items: center; gap: 10px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        Executive Summary
+    </h2>
+    
+    <h3 style="color: #475569; font-size: 1.05rem; margin-top: 20px; font-weight: 600;">Analysis Overview</h3>
+    <ul style="color: #64748b; line-height: 1.8; margin: 10px 0;">
+        <li><strong>{total_agents}</strong> agents analyzed across <strong>{total_calls:,}</strong> calls</li>
+        <li>Report generated: <strong>{datetime.now().strftime('%B %d, %Y')}</strong></li>
+        <li>Average sentiment score: <strong>{avg_sentiment:.2f}/5.0</strong></li>
+    </ul>
+    
+    <h3 style="color: #475569; font-size: 1.05rem; margin-top: 20px; font-weight: 600;">Critical Findings</h3>
+    <ul style="color: #64748b; line-height: 1.8; margin: 10px 0;">
+        <li><strong style="color: #dc2626;">{priority_dist['high']} agents</strong> require immediate coaching intervention (high-priority themes)</li>
+"""
+    
+    if top_themes:
+        themes_str = ", ".join([f"<strong>{theme}</strong> ({count} agents)" for theme, count in top_themes])
+        summary += f"        <li>Top coaching needs: {themes_str}</li>\n"
+    
+    summary += f"""        <li><strong>{top_c}</strong> pillar shows highest coaching demand ({c_needs.get(top_c, 0)} agents affected)</li>
+    </ul>
+    
+    <h3 style="color: #475569; font-size: 1.05rem; margin-top: 20px; font-weight: 600;">Agent Segmentation</h3>
+    <ul style="color: #64748b; line-height: 1.8; margin: 10px 0;">
+        <li><strong style="color: #10b981;">High Performers:</strong> {high_perf} agents (0-1 coaching themes)</li>
+        <li><strong style="color: #f59e0b;">Moderate Development:</strong> {moderate} agents (2-3 themes)</li>
+        <li><strong style="color: #dc2626;">Priority Coaching:</strong> {high_need} agents (4+ themes)</li>
+    </ul>
+    
+    <h3 style="color: #475569; font-size: 1.05rem; margin-top: 20px; font-weight: 600;">Recommended Actions</h3>
+    <ol style="color: #64748b; line-height: 1.8; margin: 10px 0;">
+        <li>Immediate 1-on-1 coaching sessions for <strong>{priority_dist['high']}</strong> high-priority agents</li>
+        <li>Launch targeted <strong>{top_c}</strong> training program (impacts {c_needs.get(top_c, 0)} agents)</li>
+"""
+    
+    if top_themes:
+        summary += f"        <li>Conduct focused workshop on <strong>{top_themes[0][0]}</strong> (most common challenge)</li>\n"
+    
+    summary += f"""        <li>Establish monthly coaching review cycle for moderate-need agents</li>
+    </ol>
+</div>
+"""
+    
+    return summary
 
 def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
     """Generate beautiful HTML report"""
@@ -1318,6 +1551,8 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                     <div class="metric-value">{f"{avg_sentiment:.2f}" if avg_sentiment > 0 else "N/A"}</div>
                 </div>
             </div>
+            
+            {generate_executive_summary(insights, df)}
             
             <h2 class="section-title">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1708,16 +1943,8 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
         
         html += f"""
                 <div class="agent-card">
-                    <div style="position: relative;">
-                        <a href="{mailto_link}" title="Share via email" style="position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10;" 
-                           onmouseover="this.style.borderColor='#0ea5e9'; this.style.boxShadow='0 2px 6px rgba(14, 165, 233, 0.3)';" 
-                           onmouseout="this.style.borderColor='#e2e8f0'; this.style.boxShadow='0 1px 3px rgba(0,0,0,0.1)';">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                                <polyline points="22,6 12,13 2,6"></polyline>
-                            </svg>
-                        </a>
-                        <div class="agent-header">
+                    <div class="agent-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                        <div style="flex: 1;">
                             <div class="agent-name">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
                                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -1730,6 +1957,14 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                                 <div class="stat-badge">{len(themes)} themes</div>
                             </div>
                         </div>
+                        <a href="{mailto_link}" title="Share via email" style="flex-shrink: 0; width: 36px; height: 36px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.3s ease; margin-left: 16px;" 
+                           onmouseover="this.style.borderColor='#0ea5e9'; this.style.boxShadow='0 2px 6px rgba(14, 165, 233, 0.3)';" 
+                           onmouseout="this.style.borderColor='#e2e8f0'; this.style.boxShadow='none';">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                        </a>
                     </div>
                     
                     <div class="theme-list">
@@ -1748,7 +1983,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
                                 Examples: {' | '.join(theme.get('examples', [])[:2])}
                             </div>
                             <div class="theme-recommendation">
-                                <strong>💡 Recommendation:</strong> {theme.get('recommendation', '')}
+                                <strong>Recommendation:</strong> {theme.get('recommendation', '')}
                             </div>
                         </div>
             """
@@ -1757,7 +1992,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             html += f"""
                     </div>
                     <div class="strengths-section">
-                        <div class="strengths-title">⭐ Strengths</div>
+                        <div class="strengths-title">Strengths</div>
                         <ul class="strengths-list">
             """
             for strength in strengths:
@@ -1776,7 +2011,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <div class="footer">
-                <p>QA Coaching Intelligence Platform | Powered by AI Analytics</p>
+                <p>QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025</p>
             </div>
         </div>
     </body>
@@ -1791,61 +2026,90 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
     prs.slide_width = Inches(10)
     prs.slide_height = Inches(7.5)
     
-    # Title slide
+    # Title slide - Clean professional design
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
     
-    # Add gradient background
+    # Modern blue background
     background = slide.background
     fill = background.fill
     fill.solid()
-    fill.fore_color.rgb = RGBColor(102, 126, 234)
+    fill.fore_color.rgb = RGBColor(14, 165, 233)  # Sky blue
     
     # Title
-    title_box = slide.shapes.add_textbox(Inches(1), Inches(2.5), Inches(8), Inches(1))
+    title_box = slide.shapes.add_textbox(Inches(1.5), Inches(2.5), Inches(7), Inches(1.2))
     title_frame = title_box.text_frame
-    title_frame.text = "🎯 QA Coaching Intelligence Report"
+    title_frame.text = "QA Coaching Intelligence Report"
     title_para = title_frame.paragraphs[0]
-    title_para.font.size = Pt(48)
+    title_para.font.size = Pt(44)
     title_para.font.bold = True
     title_para.font.color.rgb = RGBColor(255, 255, 255)
     title_para.alignment = PP_ALIGN.CENTER
     
     # Subtitle
-    subtitle_box = slide.shapes.add_textbox(Inches(1), Inches(4), Inches(8), Inches(0.5))
+    subtitle_box = slide.shapes.add_textbox(Inches(1.5), Inches(4), Inches(7), Inches(0.6))
     subtitle_frame = subtitle_box.text_frame
     subtitle_frame.text = f"Generated on {datetime.now().strftime('%B %d, %Y')}"
     subtitle_para = subtitle_frame.paragraphs[0]
-    subtitle_para.font.size = Pt(20)
-    subtitle_para.font.color.rgb = RGBColor(255, 255, 255)
+    subtitle_para.font.size = Pt(18)
+    subtitle_para.font.color.rgb = RGBColor(240, 248, 255)
     subtitle_para.alignment = PP_ALIGN.CENTER
     
-    # Key findings slide
+    # Key findings slide - Professional bullet layout
     slide = prs.slides.add_slide(prs.slide_layouts[5])  # Title only
     title = slide.shapes.title
-    title.text = "📊 Key Findings"
+    title.text = "Executive Summary"
+    title.text_frame.paragraphs[0].font.size = Pt(36)
+    title.text_frame.paragraphs[0].font.bold = True
+    title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
     
     total_calls = len(df['call_id'].unique()) if 'call_id' in df.columns else len(df)
     total_agents = len(insights)
     total_themes = sum(len(agent_data.get('coaching_themes', [])) for agent_data in insights.values())
     
-    # Add metrics
-    metrics_text = f"""
-    ✓ Analyzed {total_calls} calls
-    ✓ Reviewed {total_agents} agents
-    ✓ Identified {total_themes} coaching opportunities
-    """
-    
-    text_box = slide.shapes.add_textbox(Inches(2), Inches(2), Inches(6), Inches(3))
+    # Professional metrics box
+    text_box = slide.shapes.add_textbox(Inches(1.5), Inches(2), Inches(7), Inches(4))
     text_frame = text_box.text_frame
-    text_frame.text = metrics_text
-    for para in text_frame.paragraphs:
-        para.font.size = Pt(28)
-        para.space_before = Pt(20)
+    text_frame.word_wrap = True
     
-    # 5C Framework Overview Slide
+    # Add bullet points professionally
+    p = text_frame.paragraphs[0]
+    p.text = f"Analyzed {total_calls:,} customer calls across the organization"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = f"Evaluated performance of {total_agents} customer service agents"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = f"Identified {total_themes} targeted coaching opportunities for improvement"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    p.space_after = Pt(12)
+    
+    p = text_frame.add_paragraph()
+    p.text = "AI-powered analysis using advanced language models"
+    p.level = 0
+    p.font.size = Pt(24)
+    p.font.color.rgb = RGBColor(51, 65, 85)
+    p.space_before = Pt(12)
+    
+    # 5C Framework Overview Slide - Clean presentation
     slide = prs.slides.add_slide(prs.slide_layouts[5])
     title = slide.shapes.title
-    title.text = "🎯 5C Coaching Framework"
+    title.text = "5C Coaching Framework Analysis"
+    title.text_frame.paragraphs[0].font.size = Pt(36)
+    title.text_frame.paragraphs[0].font.bold = True
+    title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
     
     # Calculate 5C scores per agent
     agent_5c_scores = {}
@@ -1864,73 +2128,104 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
         
         agent_5c_scores[agent_name] = c_scores
     
-    # Add 5C summary
-    y_pos = 2
-    for c_name, icon in FIVE_C_ICONS.items():
+    # Add 5C summary - professional table-like layout
+    text_box = slide.shapes.add_textbox(Inches(1.5), Inches(2), Inches(7), Inches(4.5))
+    text_frame = text_box.text_frame
+    text_frame.word_wrap = True
+    
+    for c_name in FIVE_C_ICONS.keys():
         agent_scores = [(agent, scores[c_name]) for agent, scores in agent_5c_scores.items()]
-        top_agents = sorted(agent_scores, key=lambda x: x[1], reverse=True)[:3]
         agents_needing_help = len([a for a, s in agent_scores if s > 0])
         
-        text_box = slide.shapes.add_textbox(Inches(1.5), Inches(y_pos), Inches(7), Inches(0.8))
-        text_frame = text_box.text_frame
-        text_frame.text = f"{icon} {c_name}: {agents_needing_help} agents need support"
-        para = text_frame.paragraphs[0]
-        para.font.size = Pt(20)
-        para.font.bold = True
-        
-        y_pos += 0.9
+        p = text_frame.add_paragraph() if c_name != "Connection" else text_frame.paragraphs[0]
+        p.text = f"{c_name}: {agents_needing_help} agents requiring coaching support"
+        p.level = 0
+        p.font.size = Pt(22)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(51, 65, 85)
+        p.space_before = Pt(18)
+        p.space_after = Pt(8)
     
-    # Agent slides (limit to 10)
+    # Agent slides (limit to 10) - Clean professional design
     for agent_name, agent_data in list(insights.items())[:10]:
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         title = slide.shapes.title
-        title.text = f"👤 {agent_name}"
+        title.text = f"Agent Profile: {agent_name}"
+        title.text_frame.paragraphs[0].font.size = Pt(32)
+        title.text_frame.paragraphs[0].font.bold = True
+        title.text_frame.paragraphs[0].font.color.rgb = RGBColor(30, 41, 59)
         
         # Agent's 5C scores
         agent_scores = agent_5c_scores.get(agent_name, {})
         
-        # Add 5C breakdown
-        y_pos = 2
-        text_box = slide.shapes.add_textbox(Inches(1), Inches(y_pos), Inches(4), Inches(0.5))
+        # Left column - 5C breakdown
+        text_box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(4), Inches(4))
         text_frame = text_box.text_frame
-        text_frame.text = "5C Framework Scores:"
-        text_frame.paragraphs[0].font.size = Pt(18)
-        text_frame.paragraphs[0].font.bold = True
+        text_frame.word_wrap = True
         
-        y_pos += 0.6
+        p = text_frame.paragraphs[0]
+        p.text = "Framework Analysis:"
+        p.font.size = Pt(20)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(14, 165, 233)
+        p.space_after = Pt(16)
+        
         for c_name, score in agent_scores.items():
             if score > 0:
-                icon = FIVE_C_ICONS[c_name]
-                text_box = slide.shapes.add_textbox(Inches(1.2), Inches(y_pos), Inches(3.5), Inches(0.4))
-                text_frame = text_box.text_frame
-                text_frame.text = f"{icon} {c_name}: {score} issues"
-                text_frame.paragraphs[0].font.size = Pt(16)
-                y_pos += 0.5
+                p = text_frame.add_paragraph()
+                p.text = f"{c_name}: {score} coaching points"
+                p.level = 0
+                p.font.size = Pt(16)
+                p.font.color.rgb = RGBColor(71, 85, 105)
+                p.space_before = Pt(8)
+                p.space_after = Pt(8)
         
-        # Top themes
+        # Right column - Top themes
         themes = agent_data.get('coaching_themes', [])[:3]
         
-        y_pos = 2
-        theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(0.5))
+        theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(2), Inches(4), Inches(4.5))
         theme_frame = theme_box.text_frame
-        theme_frame.text = "Top Coaching Needs:"
-        theme_frame.paragraphs[0].font.size = Pt(18)
-        theme_frame.paragraphs[0].font.bold = True
+        theme_frame.word_wrap = True
         
-        y_pos += 0.6
+        p = theme_frame.paragraphs[0]
+        p.text = "Priority Coaching Areas:"
+        p.font.size = Pt(20)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(14, 165, 233)
+        p.space_after = Pt(16)
+        
         for idx, theme in enumerate(themes, 1):
-            theme_box = slide.shapes.add_textbox(Inches(5.5), Inches(y_pos), Inches(4), Inches(1))
-            theme_frame = theme_box.text_frame
+            # Theme name
+            p = theme_frame.add_paragraph()
+            p.text = f"{idx}. {theme.get('theme', '')}"
+            p.level = 0
+            p.font.size = Pt(16)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(30, 41, 59)
+            p.space_before = Pt(12)
+            p.space_after = Pt(4)
             
-            theme_frame.text = f"{idx}. {theme.get('theme', '')}"
-            theme_para = theme_frame.paragraphs[0]
-            theme_para.font.size = Pt(16)
-            theme_para.font.bold = True
-            
+            # Priority
             priority = theme.get('priority', 'low')
-            priority_text = theme_frame.add_paragraph()
-            priority_text.text = f"Priority: {priority.upper()}"
-            priority_text.font.size = Pt(14)
+            priority_color = RGBColor(220, 38, 38) if priority == 'high' else RGBColor(245, 158, 11) if priority == 'medium' else RGBColor(16, 185, 129)
+            
+            p = theme_frame.add_paragraph()
+            p.text = f"Priority Level: {priority.upper()}"
+            p.level = 1
+            p.font.size = Pt(13)
+            p.font.color.rgb = priority_color
+            p.space_after = Pt(2)
+            
+            # Recommendation
+            recommendation = theme.get('recommendation', '')[:120]
+            if recommendation:
+                p = theme_frame.add_paragraph()
+                p.text = f"{recommendation}..."
+                p.level = 1
+                p.font.size = Pt(12)
+                p.font.italic = True
+                p.font.color.rgb = RGBColor(100, 116, 139)
+                p.space_after = Pt(8)
             
             if priority == 'high':
                 priority_text.font.color.rgb = RGBColor(245, 87, 108)
@@ -1975,10 +2270,27 @@ def generate_powerpoint(insights: Dict, df: pd.DataFrame) -> bytes:
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### 🎯 QA Coaching Intelligence")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 20px;'>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <h3 style='margin: 0; color: #1e293b;'>QA Coaching Intelligence</h3>
+        </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
     
-    st.markdown("#### LLM Provider")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>LLM Provider</h4>
+        </div>
+    """, unsafe_allow_html=True)
     llm_provider = st.radio(
         "Select provider:",
         ["OpenRouter", "Local LLM (LM Studio/Ollama)"],
@@ -2017,13 +2329,29 @@ with st.sidebar:
         st.info("💡 Make sure LM Studio or Ollama is running")
     
     st.markdown("---")
-    st.markdown("#### Analysis Model")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="3"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Analysis Model</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     if st.session_state.llm_provider == "openrouter":
         analysis_model = st.selectbox(
             "Select model:",
             options=list(MODELS.keys()),
-            format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}" + (" ✨" if MODELS[x].get('recommended') else ""),
+            format_func=lambda x: f"{MODELS[x]['rating']} {MODELS[x]['name']}" + (" (Recommended)" if MODELS[x].get('recommended') else ""),
             index=0
         )
         st.info(f"**Best for:** {MODELS[analysis_model]['best_for']}\n\n**Speed:** {MODELS[analysis_model]['speed']}")
@@ -2035,7 +2363,15 @@ with st.sidebar:
         )
     
     st.markdown("---")
-    st.markdown("#### Processing Settings")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m5.656-14.656l-4.242 4.242m-2.828 2.828l-4.242 4.242M23 12h-6m-6 0H1m17.656 5.656l-4.242-4.242m-2.828-2.828l-4.242-4.242"></path>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Processing Settings</h4>
+        </div>
+    """, unsafe_allow_html=True)
     
     max_concurrent = st.slider(
         "Concurrent requests:",
@@ -2055,8 +2391,84 @@ with st.sidebar:
     )
     st.session_state.calls_per_minute = calls_per_minute
     
+    # Session Management
     st.markdown("---")
-    st.markdown("#### Coaching Themes")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Session Management</h4>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Check for existing session if data is loaded
+    if st.session_state.get('processed_df') is not None:
+        file_hash = calculate_file_hash(st.session_state.processed_df)
+        st.session_state.file_hash = file_hash
+        
+        existing_session = load_latest_session(file_hash)
+        
+        if existing_session:
+            st.info(f"**Session Found**\n\n"
+                   f"Agents: {len(existing_session['agent_names'])}\n\n"
+                   f"Date: {datetime.fromisoformat(existing_session['timestamp']).strftime('%b %d, %I:%M %p')}\n\n"
+                   f"Model: {existing_session['model_used'][:30]}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Resume", use_container_width=True):
+                    st.session_state.coaching_insights = existing_session['insights']
+                    st.session_state.processed = True
+                    st.session_state.analytics_context = generate_analytics_context(
+                        existing_session['insights'],
+                        st.session_state.processed_df
+                    )
+                    st.rerun()
+            with col2:
+                if st.button("New", use_container_width=True):
+                    st.session_state.coaching_insights = {}
+                    st.session_state.processed = False
+                    st.rerun()
+    
+    # Session Browser
+    with st.expander("Previous Sessions"):
+        all_sessions = list_all_sessions()
+        
+        if all_sessions:
+            for session in all_sessions[:5]:  # Show last 5
+                st.write(f"**{datetime.fromisoformat(session['timestamp']).strftime('%b %d %I:%M %p')}**")
+                st.write(f"{len(session['agent_names'])} agents")
+                
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    if st.button("Load", key=f"load_{session['filename']}", use_container_width=True):
+                        st.session_state.coaching_insights = session['insights']
+                        st.session_state.processed = True
+                        st.rerun()
+                with col2:
+                    if st.button("🗑", key=f"del_{session['filename']}"):
+                        Path(session['filepath']).unlink()
+                        st.rerun()
+                st.divider()
+        else:
+            st.caption("No saved sessions")
+    
+    st.markdown("---")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 8px; margin-bottom: 10px;'>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <h4 style='margin: 0; color: #475569;'>Coaching Themes</h4>
+        </div>
+    """, unsafe_allow_html=True)
     theme_option = st.radio("Theme source:", ["Pre-loaded", "Custom", "Both"])
     
     if theme_option == "Custom":
@@ -2075,18 +2487,35 @@ with st.sidebar:
     st.caption(f"{len(coaching_themes)} themes active")
 
 # Main content
-st.markdown("<div style='text-align: center; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("<h1 style='font-size: 3.5rem; font-weight: 700; color: #1e293b;'>🎯 QA Coaching Intelligence</h1>", unsafe_allow_html=True)
-st.markdown("<p style='font-size: 1.3rem; color: white; opacity: 0.9;'>Transform Every Call into Coaching Excellence</p>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("""
+    <div style='text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-radius: 20px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
+        <div style='display: flex; justify-content: center; margin-bottom: 20px;'>
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+            </svg>
+        </div>
+        <h1 style='font-size: 3rem; font-weight: 700; color: #1e293b; margin: 0 0 10px 0;'>QA Coaching Intelligence</h1>
+        <p style='font-size: 1.2rem; color: #64748b; margin: 0;'>Transform Every Call into Coaching Excellence</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Process", "📊 Dashboard", "💬 Q&A Chat", "💾 Export & Session"])
+tab1, tab2, tab3, tab4 = st.tabs(["Upload & Process", "Dashboard", "Q&A Chat", "Export & Session"])
 
 with tab1:
     st.markdown("<div style='background: rgba(255,255,255,0.95); padding: 40px; border-radius: 20px; margin: 20px 0;'>", unsafe_allow_html=True)
     
-    st.markdown("### 📤 Step 1: Upload Files")
+    st.markdown("""
+        <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h3 style='margin: 0; color: #1e293b;'>Step 1: Upload Files</h3>
+        </div>
+    """, unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
         "Supported: CSV, XLSX, XLS, TXT, Parquet",
         type=['csv', 'xlsx', 'xls', 'txt', 'parquet'],
@@ -2124,7 +2553,16 @@ with tab1:
     
     if st.session_state.get('data_loaded'):
         st.markdown("---")
-        st.markdown("### 🗂️ Step 2: Map Columns")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Step 2: Map Columns</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         df = st.session_state.raw_df
         available_columns = list(df.columns)
@@ -2132,19 +2570,46 @@ with tab1:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("#### Required Fields")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Required Fields</h4>
+                </div>
+            """, unsafe_allow_html=True)
             call_id_col = st.selectbox("Call ID column:", [""] + available_columns, key="call_id_col")
             agent_col = st.selectbox("Agent column:", [""] + available_columns, key="agent_col")
             transcript_col = st.selectbox("Transcript column:", [""] + available_columns, key="transcript_col")
         
         with col2:
-            st.markdown("#### Optional Fields")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Optional Fields</h4>
+                </div>
+            """, unsafe_allow_html=True)
             sentiment_col = st.selectbox("Sentiment Score:", ["None"] + available_columns, key="sentiment_col")
             timestamp_col = st.selectbox("Timestamp:", ["None"] + available_columns, key="timestamp_col")
             duration_col = st.selectbox("Call Duration:", ["None"] + available_columns, key="duration_col")
         
         with col3:
-            st.markdown("#### Additional Metrics")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 8px; margin: 10px 0;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    <h4 style='margin: 0; color: #475569;'>Additional Metrics</h4>
+                </div>
+            """, unsafe_allow_html=True)
             custom_cols = st.multiselect(
                 "Other columns to include:",
                 [c for c in available_columns if c not in [call_id_col, agent_col, transcript_col, sentiment_col, timestamp_col, duration_col]],
@@ -2331,7 +2796,16 @@ with tab2:
     if st.session_state.get('pre_analysis_done'):
         analytics = st.session_state.pre_analytics
         
-        st.markdown("### 📊 Pre-Analysis Dashboard (DuckDB)")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Pre-Analysis Dashboard (DuckDB)</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -2352,7 +2826,17 @@ with tab2:
         st.markdown("---")
         
         # Agent performance table
-        st.markdown("#### 👥 Agent Statistics")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin: 15px 0;'>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <h4 style='margin: 0; color: #1e293b;'>Agent Statistics</h4>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Merge stats
         display_df = analytics['agent_stats'].copy()
@@ -2386,35 +2870,63 @@ with tab2:
         
         # Coaching insights section
         if not st.session_state.get('processed'):
-            st.markdown("### 🎯 Generate Coaching Insights")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <h3 style='margin: 0; color: #1e293b;'>Generate Coaching Insights</h3>
+                </div>
+            """, unsafe_allow_html=True)
             st.info("📌 Pre-analysis complete! Now optionally generate AI-powered coaching themes.")
             
             # Validation
             if st.session_state.llm_provider == "openrouter" and not st.session_state.get('openrouter_api_key'):
                 st.error("❌ Please provide OpenRouter API key in sidebar")
             else:
-                if st.button("🚀 Generate Coaching Themes (LLM)", use_container_width=True, type="primary"):
+                if st.button("Generate Coaching Themes (LLM)", use_container_width=True, type="primary"):
                     with st.spinner("Generating coaching insights..."):
                         # Get agents data
                         df = st.session_state.processed_df
+                        
+                        # Calculate file hash for session management
+                        file_hash = calculate_file_hash(df)
+                        st.session_state.file_hash = file_hash
+                        
+                        # Check for existing session
+                        existing_session = load_latest_session(file_hash)
+                        previously_analyzed = set(existing_session['agent_names']) if existing_session else set()
                         
                         # Filter agents with 10+ calls
                         agent_call_counts = df.groupby('agent')['call_id'].nunique()
                         eligible_agents = agent_call_counts[agent_call_counts >= 10].index.tolist()
                         excluded_agents = agent_call_counts[agent_call_counts < 10]
                         
+                        # Remove already analyzed agents
+                        new_agents = [a for a in eligible_agents if a not in previously_analyzed]
+                        
                         # Filter DataFrame to eligible agents only
-                        df_filtered = df[df['agent'].isin(eligible_agents)]
+                        df_filtered = df[df['agent'].isin(new_agents)]
                         
                         # Show filtering info
-                        st.info(f"📊 **Analysis Scope:**\n"
-                               f"- Analyzing {len(eligible_agents)} agents with 10+ calls\n"
-                               f"- Excluded {len(excluded_agents)} agents with <10 calls (insufficient data)\n"
-                               f"- Prioritizing low sentiment calls for coaching focus")
+                        info_msg = f"**Analysis Scope:**\n"
+                        info_msg += f"- Analyzing {len(new_agents)} new agents with 10+ calls\n"
+                        info_msg += f"- Excluded {len(excluded_agents)} agents with <10 calls\n"
+                        if previously_analyzed:
+                            info_msg += f"- Resuming from previous session ({len(previously_analyzed)} agents already analyzed)\n"
+                        info_msg += f"- Prioritizing low sentiment calls for coaching focus"
+                        st.info(info_msg)
+                        
+                        if not new_agents:
+                            st.success("All eligible agents already analyzed! Loading previous results...")
+                            st.session_state.coaching_insights = existing_session['insights']
+                            st.session_state.processed = True
+                            st.rerun()
                         
                         # Group by agent and prioritize low sentiment calls
                         agents_data = []
-                        for agent in eligible_agents:
+                        for agent in new_agents:
                             agent_df = df_filtered[df_filtered['agent'] == agent]
                             
                             # Get unique calls for this agent
@@ -2429,15 +2941,13 @@ with tab2:
                                     if pd.notna(avg_sentiment):
                                         call_sentiments.append((call_id, avg_sentiment))
                                 
-                                # Sort by sentiment (lowest first) and take top 4-5
+                                # Sort by sentiment (lowest first) and take top 5
                                 if call_sentiments:
                                     call_sentiments.sort(key=lambda x: x[1])
                                     selected_calls = [c[0] for c in call_sentiments[:5]]
                                 else:
-                                    # No sentiment data, just take first 5
                                     selected_calls = call_ids[:5]
                             else:
-                                # No sentiment column, just take first 5 calls
                                 selected_calls = call_ids[:5]
                             
                             # Get data for selected calls
@@ -2445,124 +2955,123 @@ with tab2:
                             agents_data.append((agent, selected_data))
                         
                         total_agents = len(agents_data)
-                        
-                        # Get coaching themes from session state (set in sidebar)
                         themes = st.session_state.get('coaching_themes', DEFAULT_THEMES)
                         
-                        st.info(f"Processing {total_agents} agents with {len(themes)} coaching themes")
+                        # Batch configuration
+                        BATCH_SIZE = 20
+                        agent_batches = [agents_data[i:i + BATCH_SIZE] for i in range(0, len(agents_data), BATCH_SIZE)]
+                        total_batches = len(agent_batches)
+                        
+                        st.info(f"Processing {total_agents} agents in {total_batches} batch(es) of up to {BATCH_SIZE} agents each")
+                        
+                        # Initialize or load insights
+                        all_insights = existing_session['insights'].copy() if existing_session else {}
                         
                         # Progress tracking
-                        progress_bar = st.progress(0.0)
-                        status_text = st.empty()
-                        log_area = st.empty()
+                        overall_progress = st.progress(0.0)
+                        batch_status = st.empty()
                         
                         start_time = time.time()
                         
-                        # Run parallel processing
-                        async def run_processing():
-                            insights = await process_all_agents_parallel(
-                                agents_data,
-                                themes,
-                                st.session_state.get('analysis_model', 'deepseek/deepseek-chat:free'),
-                                st.session_state.llm_provider,
-                                st.session_state.get('openrouter_api_key'),
-                                st.session_state.get('local_llm_url'),
-                                max_concurrent=st.session_state.get('max_concurrent', 10),
-                                calls_per_minute=st.session_state.get('calls_per_minute', 50)
-                            )
-                            return insights
+                        # Process each batch
+                        for batch_num, agent_batch in enumerate(agent_batches, 1):
+                            batch_status.write(f"**Batch {batch_num}/{total_batches}** - Processing {len(agent_batch)} agents...")
+                            
+                            # Run parallel processing for this batch
+                            async def run_batch():
+                                return await process_all_agents_parallel(
+                                    agent_batch,
+                                    themes,
+                                    st.session_state.get('analysis_model', 'deepseek/deepseek-chat:free'),
+                                    st.session_state.llm_provider,
+                                    st.session_state.get('openrouter_api_key'),
+                                    st.session_state.get('local_llm_url'),
+                                    max_concurrent=st.session_state.get('max_concurrent', 10),
+                                    calls_per_minute=st.session_state.get('calls_per_minute', 50)
+                                )
+                            
+                            import nest_asyncio
+                            nest_asyncio.apply()
+                            
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            
+                            try:
+                                batch_insights = loop.run_until_complete(run_batch())
+                                
+                                # Merge results
+                                all_insights.update(batch_insights)
+                                
+                                # Save session after each batch
+                                save_session(
+                                    file_hash=file_hash,
+                                    insights=all_insights,
+                                    filter_criteria={'min_calls': 10, 'sentiment_priority': True},
+                                    model_used=st.session_state.get('analysis_model', 'deepseek/deepseek-chat:free')
+                                )
+                                
+                                batch_status.success(f"Batch {batch_num}/{total_batches} complete: {len(batch_insights)} agents processed")
+                                overall_progress.progress(batch_num / total_batches)
+                                
+                            except Exception as e:
+                                batch_status.error(f"Batch {batch_num} error: {str(e)}")
+                                continue
                         
-                        import nest_asyncio
-                        nest_asyncio.apply()
+                        elapsed = time.time() - start_time
+                        overall_progress.progress(1.0)
                         
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        
-                        try:
-                            status_text.text("Processing agents in parallel...")
+                        if not all_insights or len(all_insights) == 0:
+                            st.error("No insights generated. The LLM may have failed.")
                             
-                            # Create log container
-                            with st.expander("📋 Processing Logs", expanded=True):
-                                log_container = st.empty()
-                                logs = []
-                                
-                                # Monkey patch print to capture logs
-                                import sys
-                                from io import StringIO
-                                old_stdout = sys.stdout
-                                sys.stdout = log_buffer = StringIO()
-                            
-                            insights = loop.run_until_complete(run_processing())
-                            
-                            # Restore stdout and get logs
-                            sys.stdout = old_stdout
-                            log_text = log_buffer.getvalue()
-                            if log_text:
-                                with st.expander("📋 Processing Logs", expanded=True):
-                                    st.code(log_text)
-                            
-                            elapsed = time.time() - start_time
-                            
-                            progress_bar.progress(1.0)
-                            
-                            if not insights or len(insights) == 0:
-                                log_area.error("⚠️ No insights generated. The LLM may have failed.")
-                                
-                                # Simple retry button - uses model from sidebar
-                                st.markdown("---")
-                                if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary"):
-                                    st.session_state.processed = False
-                                    st.session_state.coaching_insights = {}
-                                    st.rerun()
-                                
-                            else:
-                                status_text.text(f"✅ Processed {len(insights)} agents in {elapsed:.1f}s")
-                                
-                                # Save insights to DuckDB for caching and chat context
-                                conn = st.session_state.duckdb_conn
-                                cache_rows = []
-                                for agent_name, agent_data in insights.items():
-                                    for theme in agent_data.get('coaching_themes', []):
-                                        cache_rows.append({
-                                            'agent': agent_name,
-                                            'theme': theme.get('theme', ''),
-                                            'priority': theme.get('priority', 'low'),
-                                            'frequency': theme.get('frequency', 1),
-                                            'examples': str(theme.get('examples', [])),
-                                            'recommendation': theme.get('recommendation', ''),
-                                            'processed_at': datetime.now().isoformat(),
-                                            'model_used': st.session_state.get('analysis_model', 'unknown')
-                                        })
-                                
-                                if cache_rows:
-                                    cache_df = pd.DataFrame(cache_rows)
-                                    conn.execute("DROP TABLE IF EXISTS coaching_cache")
-                                    conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
-                                    st.success(f"💾 Cached {len(cache_rows)} coaching insights for future queries")
-                                
-                                st.session_state.coaching_insights = insights
-                                st.session_state.processed = True
-                                time.sleep(1)
-                                st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"Processing failed: {str(e)}")
-                            import traceback
-                            log_area.code(traceback.format_exc())
-                            
-                            # Simple retry button
-                            st.markdown("---")
-                            if st.button("🔄 Retry with Selected Model", use_container_width=True, type="primary", key="retry_error"):
+                            # Retry button
+                            if st.button("Retry with Selected Model", use_container_width=True, type="primary"):
                                 st.session_state.processed = False
                                 st.session_state.coaching_insights = {}
                                 st.rerun()
-                        finally:
-                            loop.close()
+                        else:
+                            batch_status.success(f"All batches complete! Processed {len(all_insights)} agents in {elapsed:.1f}s")
+                            
+                            # Save insights to DuckDB for caching and chat context
+                            conn = st.session_state.duckdb_conn
+                            cache_rows = []
+                            for agent_name, agent_data in all_insights.items():
+                                for theme in agent_data.get('coaching_themes', []):
+                                    cache_rows.append({
+                                        'agent': agent_name,
+                                        'theme': theme.get('theme', ''),
+                                        'priority': theme.get('priority', 'low'),
+                                        'frequency': theme.get('frequency', 1),
+                                        'examples': str(theme.get('examples', [])),
+                                        'recommendation': theme.get('recommendation', ''),
+                                        'processed_at': datetime.now().isoformat(),
+                                        'model_used': st.session_state.get('analysis_model', 'unknown')
+                                    })
+                            
+                            if cache_rows:
+                                cache_df = pd.DataFrame(cache_rows)
+                                conn.execute("DROP TABLE IF EXISTS coaching_cache")
+                                conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
+                                st.success(f"Cached {len(cache_rows)} coaching insights for future queries")
+                            
+                            # Generate analytics context for chat
+                            st.session_state.analytics_context = generate_analytics_context(all_insights, df)
+                            
+                            st.session_state.coaching_insights = all_insights
+                            st.session_state.processed = True
+                            time.sleep(1)
+                            st.rerun()
         
         # Show coaching insights if available
         if st.session_state.get('processed'):
             st.markdown("---")
-            st.markdown("### 🎯 AI-Powered Coaching Insights")
+            st.markdown("""
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 20px;'>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    <h3 style='margin: 0; color: #1e293b;'>AI-Powered Coaching Insights</h3>
+                </div>
+            """, unsafe_allow_html=True)
             
             insights = st.session_state.coaching_insights
             df = st.session_state.processed_df
@@ -2578,14 +3087,21 @@ with tab2:
 
 with tab3:
     if st.session_state.processed:
-        st.markdown("### 💬 Ask Questions About Your Data")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Ask Questions About Your Data</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         # Chat model selector
         with st.expander("⚙️ Chat Settings"):
             chat_model = st.selectbox(
                 "Chat model:",
                 options=list(MODELS.keys()),
-                format_func=lambda x: f"{MODELS[x]['stars']} {MODELS[x]['name']}",
+                format_func=lambda x: f"{MODELS[x]['rating']} {MODELS[x]['name']}",
                 index=list(MODELS.keys()).index("mistralai/mistral-nemo:free")
             )
         
@@ -2616,6 +3132,7 @@ with tab3:
             # Prepare context
             insights = st.session_state.coaching_insights
             df = st.session_state.processed_df
+            analytics_context = st.session_state.get('analytics_context', '')
             
             # Simple query routing
             question_lower = user_question.lower()
@@ -2625,6 +3142,7 @@ with tab3:
                 conn = st.session_state.duckdb_conn
                 has_coaching = conn.execute("SELECT COUNT(*) FROM coaching_cache").fetchone()[0] > 0
                 
+                # Quick SQL queries for specific patterns
                 if has_coaching and any(kw in question_lower for kw in ['coaching', 'theme', 'improve', 'recommendation']):
                     # Coaching-specific queries
                     if 'top' in question_lower and 'theme' in question_lower:
@@ -2693,19 +3211,23 @@ with tab3:
                     st.rerun()
             
             else:
-                # Use LLM for coaching questions
-                context = f"Coaching insights for {len(insights)} agents:\n\n"
-                for agent, data in insights.items():
-                    context += f"{agent}: {len(data.get('coaching_themes', []))} coaching themes\n"
+                # Use LLM for complex analytical questions with full analytics context
+                enhanced_context = f"""{analytics_context}
+
+Detailed Coaching Insights:
+"""
+                for agent, data in list(insights.items())[:20]:  # Limit to prevent token overflow
+                    enhanced_context += f"\n{agent}: {len(data.get('coaching_themes', []))} themes\n"
                     for theme in data.get('coaching_themes', [])[:2]:
-                        context += f"  - {theme.get('theme', '')} ({theme.get('priority', '')})\n"
+                        enhanced_context += f"  - {theme.get('theme', '')} ({theme.get('priority', '')}): {theme.get('recommendation', '')[:100]}...\n"
                 
                 messages = [
-                    {"role": "system", "content": "You are a helpful QA coaching assistant. Answer questions based on the coaching data provided. Be specific and cite agent names when relevant."},
-                    {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {user_question}"}
+                    {"role": "system", "content": "You are an expert QA coaching analyst with access to comprehensive coaching data and analytics. Answer questions with specific insights, data-driven recommendations, and cite agent names when relevant. Use the analytics context to provide accurate statistics and trends."},
+                    {"role": "user", "content": f"Analytics Context:\n{enhanced_context}\n\nQuestion: {user_question}\n\nProvide a detailed, data-driven answer based on the analytics context above."}
                 ]
                 
-                response = call_llm(chat_model, messages, temperature=0.5, is_json=False)
+                with st.spinner("Analyzing with AI..."):
+                    response = call_llm(chat_model, messages, temperature=0.5, is_json=False)
                 
                 if response and 'choices' in response:
                     answer = response['choices'][0]['message']['content']
@@ -2718,7 +3240,16 @@ with tab3:
 
 with tab4:
     if st.session_state.processed:
-        st.markdown("### 📥 Download Reports")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Download Reports</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
         
@@ -2817,7 +3348,16 @@ with tab4:
                     )
         
         st.markdown("---")
-        st.markdown("### 💾 Session Management")
+        st.markdown("""
+            <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px;'>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <h3 style='margin: 0; color: #1e293b;'>Session Management</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         
@@ -2847,27 +3387,40 @@ with tab4:
                     'content': json.dumps(st.session_state.coaching_insights)
                 }])
                 
-                parquet_bytes = convert_to_parquet(session_df, 'session.parquet')
-                
-                st.download_button(
-                    "📥 Download Session File",
-                    data=parquet_bytes,
-                    file_name=f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet",
-                    mime="application/octet-stream",
-                    use_container_width=True
-                )
+                # Get latest session file
+                file_hash = st.session_state.get('file_hash')
+                if file_hash:
+                    sessions_dir = get_sessions_dir()
+                    matching_sessions = list(sessions_dir.glob(f"session_{file_hash}_*.pkl"))
+                    
+                    if matching_sessions:
+                        latest_session_file = max(matching_sessions, key=lambda p: p.stat().st_mtime)
+                        
+                        with open(latest_session_file, 'rb') as f:
+                            session_bytes = f.read()
+                        
+                        st.download_button(
+                            "Download Session File",
+                            data=session_bytes,
+                            file_name=f"coaching_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl",
+                            mime="application/octet-stream",
+                            use_container_width=True
+                        )
+                    else:
+                        st.warning("No session found. Run analysis first.")
+                else:
+                    st.warning("No session available. Run analysis first.")
         
         with col2:
-            session_file = st.file_uploader("📂 Load Session", type=['parquet'])
+            session_file = st.file_uploader("Load Session", type=['pkl'])
             if session_file:
-                # Load session
-                session_df = pd.read_parquet(session_file)
-                if not session_df.empty:
-                    content = json.loads(session_df.iloc[0]['content'])
-                    st.session_state.coaching_insights = content
-                    st.session_state.processed = True
-                    st.success("✅ Session loaded!")
-                    st.rerun()
+                # Load pickle session
+                session_data = pickle.load(session_file)
+                st.session_state.coaching_insights = session_data['insights']
+                st.session_state.processed = True
+                st.session_state.file_hash = session_data['file_hash']
+                st.success("Session loaded successfully!")
+                st.rerun()
     
     else:
         st.info("👆 Process transcripts first!")
@@ -2875,5 +3428,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Developed by CE Innovations Lab 2025", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
