@@ -1014,6 +1014,52 @@ def calculate_file_hash(df: pd.DataFrame) -> str:
     sample = df.head(100).to_csv(index=False)
     return hashlib.md5(sample.encode()).hexdigest()[:12]
 
+def validate_theme(theme: any) -> dict:
+    """Validate and sanitize theme object - DEFENSIVE"""
+    if not isinstance(theme, dict):
+        return {
+            'theme': 'Unknown Theme',
+            'priority': 'low',
+            'frequency': 0,
+            'examples': [],
+            'recommendation': 'Invalid theme data'
+        }
+    
+    return {
+        'theme': str(theme.get('theme', 'Unknown Theme')) if theme.get('theme') else 'Unknown Theme',
+        'priority': str(theme.get('priority', 'low')) if theme.get('priority') in ['high', 'medium', 'low'] else 'low',
+        'frequency': int(theme.get('frequency', 0)) if isinstance(theme.get('frequency'), (int, float)) else 0,
+        'examples': theme.get('examples', []) if isinstance(theme.get('examples'), list) else [],
+        'recommendation': str(theme.get('recommendation', '')) if theme.get('recommendation') else ''
+    }
+
+def validate_coaching_insights(insights: dict) -> dict:
+    """Validate entire coaching insights structure"""
+    if not isinstance(insights, dict):
+        return {}
+    
+    validated = {}
+    for agent_name, agent_data in insights.items():
+        if not isinstance(agent_data, dict):
+            continue
+        
+        coaching_themes = agent_data.get('coaching_themes', [])
+        if not isinstance(coaching_themes, list):
+            coaching_themes = []
+        
+        # Validate each theme
+        validated_themes = []
+        for theme in coaching_themes:
+            if theme:  # Skip None/empty
+                validated_themes.append(validate_theme(theme))
+        
+        validated[agent_name] = {
+            'coaching_themes': validated_themes,
+            'strengths': agent_data.get('strengths', []) if isinstance(agent_data.get('strengths'), list) else []
+        }
+    
+    return validated
+
 def get_sessions_dir() -> Path:
     """Get or create sessions directory"""
     sessions_dir = Path("/mnt/user-data/outputs/sessions")
@@ -2999,6 +3045,9 @@ with tab2:
                             try:
                                 batch_insights = loop.run_until_complete(run_batch())
                                 
+                                # VALIDATE batch insights before merging - CRITICAL
+                                batch_insights = validate_coaching_insights(batch_insights)
+                                
                                 # Merge results
                                 all_insights.update(batch_insights)
                                 
@@ -3015,6 +3064,9 @@ with tab2:
                                 
                             except Exception as e:
                                 batch_status.error(f"Batch {batch_num} error: {str(e)}")
+                                import traceback
+                                with st.expander("Error Details"):
+                                    st.code(traceback.format_exc())
                                 continue
                         
                         elapsed = time.time() - start_time
@@ -3035,17 +3087,34 @@ with tab2:
                             conn = st.session_state.duckdb_conn
                             cache_rows = []
                             for agent_name, agent_data in all_insights.items():
-                                for theme in agent_data.get('coaching_themes', []):
-                                    cache_rows.append({
-                                        'agent': agent_name,
-                                        'theme': theme.get('theme', ''),
-                                        'priority': theme.get('priority', 'low'),
-                                        'frequency': theme.get('frequency', 1),
-                                        'examples': str(theme.get('examples', [])),
-                                        'recommendation': theme.get('recommendation', ''),
-                                        'processed_at': datetime.now().isoformat(),
-                                        'model_used': st.session_state.get('analysis_model', 'unknown')
-                                    })
+                                # DEFENSIVE: Check agent_data is dict
+                                if not isinstance(agent_data, dict):
+                                    continue
+                                
+                                themes = agent_data.get('coaching_themes', [])
+                                # DEFENSIVE: Check themes is list
+                                if not isinstance(themes, list):
+                                    continue
+                                
+                                for theme in themes:
+                                    # DEFENSIVE: Validate theme is dict
+                                    if not isinstance(theme, dict):
+                                        continue
+                                    
+                                    try:
+                                        cache_rows.append({
+                                            'agent': str(agent_name),
+                                            'theme': str(theme.get('theme', 'Unknown')),
+                                            'priority': str(theme.get('priority', 'low')),
+                                            'frequency': int(theme.get('frequency', 1)) if isinstance(theme.get('frequency'), (int, float)) else 1,
+                                            'examples': str(theme.get('examples', [])),
+                                            'recommendation': str(theme.get('recommendation', '')),
+                                            'processed_at': datetime.now().isoformat(),
+                                            'model_used': st.session_state.get('analysis_model', 'unknown')
+                                        })
+                                    except Exception:
+                                        # Skip malformed theme
+                                        continue
                             
                             if cache_rows:
                                 cache_df = pd.DataFrame(cache_rows)
@@ -3270,26 +3339,48 @@ with tab4:
                 insights = st.session_state.coaching_insights
                 rows = []
                 for agent, data in insights.items():
-                    for theme in data.get('coaching_themes', []):
-                        rows.append({
-                            'agent': agent,
-                            'theme': theme.get('theme', ''),
-                            'priority': theme.get('priority', ''),
-                            'frequency': theme.get('frequency', 0),
-                            'examples': ' | '.join(theme.get('examples', [])),
-                            'recommendation': theme.get('recommendation', '')
-                        })
+                    if not isinstance(data, dict):
+                        continue
+                    
+                    themes = data.get('coaching_themes', [])
+                    if not isinstance(themes, list):
+                        continue
+                    
+                    for theme in themes:
+                        if not isinstance(theme, dict):
+                            continue
+                        
+                        try:
+                            examples = theme.get('examples', [])
+                            if isinstance(examples, list):
+                                examples_str = ' | '.join(str(e) for e in examples)
+                            else:
+                                examples_str = str(examples)
+                            
+                            rows.append({
+                                'agent': str(agent),
+                                'theme': str(theme.get('theme', 'Unknown')),
+                                'priority': str(theme.get('priority', 'low')),
+                                'frequency': int(theme.get('frequency', 0)) if isinstance(theme.get('frequency'), (int, float)) else 0,
+                                'examples': examples_str,
+                                'recommendation': str(theme.get('recommendation', ''))
+                            })
+                        except Exception:
+                            continue
                 
-                export_df = pd.DataFrame(rows)
-                csv = export_df.to_csv(index=False)
-                
-                st.download_button(
-                    "Download CSV",
-                    data=csv,
-                    file_name=f"coaching_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                if not rows:
+                    st.warning("No valid coaching data to export")
+                else:
+                    export_df = pd.DataFrame(rows)
+                    csv = export_df.to_csv(index=False)
+                    
+                    st.download_button(
+                        "Download CSV",
+                        data=csv,
+                        file_name=f"coaching_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
         
         with col3:
             # Excel Export
