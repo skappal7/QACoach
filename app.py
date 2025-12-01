@@ -1014,57 +1014,6 @@ def calculate_file_hash(df: pd.DataFrame) -> str:
     sample = df.head(100).to_csv(index=False)
     return hashlib.md5(sample.encode()).hexdigest()[:12]
 
-def validate_theme(theme: any) -> dict:
-    """Validate and sanitize theme object - DEFENSIVE PROGRAMMING"""
-    if not isinstance(theme, dict):
-        return {
-            'theme': 'Unknown Theme',
-            'priority': 'low',
-            'frequency': 0,
-            'examples': [],
-            'recommendation': 'Invalid theme data'
-        }
-    
-    return {
-        'theme': theme.get('theme', 'Unknown Theme') if isinstance(theme.get('theme'), str) else 'Unknown Theme',
-        'priority': theme.get('priority', 'low') if theme.get('priority') in ['high', 'medium', 'low'] else 'low',
-        'frequency': theme.get('frequency', 0) if isinstance(theme.get('frequency'), (int, float)) else 0,
-        'examples': theme.get('examples', []) if isinstance(theme.get('examples'), list) else [],
-        'recommendation': theme.get('recommendation', '') if isinstance(theme.get('recommendation'), str) else ''
-    }
-
-def validate_coaching_insights(insights: dict) -> dict:
-    """Validate entire coaching insights structure"""
-    if not isinstance(insights, dict):
-        return {}
-    
-    validated = {}
-    for agent_name, agent_data in insights.items():
-        if not isinstance(agent_data, dict):
-            continue
-        
-        coaching_themes = agent_data.get('coaching_themes', [])
-        if not isinstance(coaching_themes, list):
-            coaching_themes = []
-        
-        # Validate each theme
-        validated_themes = [validate_theme(t) for t in coaching_themes if t]
-        
-        validated[agent_name] = {
-            'coaching_themes': validated_themes,
-            'strengths': agent_data.get('strengths', []) if isinstance(agent_data.get('strengths'), list) else []
-        }
-    
-    return validated
-
-def get_df_from_duckdb(limit: int = None) -> pd.DataFrame:
-    """Get DataFrame from DuckDB - use limit to avoid loading full dataset"""
-    conn = st.session_state.duckdb_conn
-    query = "SELECT * FROM transcripts"
-    if limit:
-        query += f" LIMIT {limit}"
-    return conn.execute(query).fetchdf()
-
 def get_sessions_dir() -> Path:
     """Get or create sessions directory"""
     sessions_dir = Path("/mnt/user-data/outputs/sessions")
@@ -2062,7 +2011,7 @@ def generate_html_report(insights: Dict, df: pd.DataFrame) -> str:
             </div>
             
             <div class="footer">
-                <p>QA Coaching Intelligence Platform | Powered by AI Analytics</p>
+                <p>QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025</p>
             </div>
         </div>
     </body>
@@ -2456,8 +2405,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     # Check for existing session if data is loaded
-    if st.session_state.get('sample_df') is not None:
-        file_hash = calculate_file_hash(st.session_state.sample_df)
+    if st.session_state.get('processed_df') is not None:
+        file_hash = calculate_file_hash(st.session_state.processed_df)
         st.session_state.file_hash = file_hash
         
         existing_session = load_latest_session(file_hash)
@@ -2471,11 +2420,11 @@ with st.sidebar:
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Resume", use_container_width=True):
-                    st.session_state.coaching_insights = validate_coaching_insights(existing_session['insights'])
+                    st.session_state.coaching_insights = existing_session['insights']
                     st.session_state.processed = True
                     st.session_state.analytics_context = generate_analytics_context(
                         existing_session['insights'],
-                        st.session_state.sample_df
+                        st.session_state.processed_df
                     )
                     st.rerun()
             with col2:
@@ -2576,89 +2525,31 @@ with tab1:
     if uploaded_files:
         st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
         
-        if st.button("Load & Convert to Parquet", use_container_width=True):
+        if st.button("🔄 Load & Convert to Parquet", use_container_width=True):
             with st.spinner("Loading and converting files..."):
-                try:
-                    # PARQUET-FIRST: Stream directly to disk, no pandas intermediate
-                    conn = st.session_state.duckdb_conn
+                all_data = []
+                
+                for uploaded_file in uploaded_files:
+                    df = load_file_to_dataframe(uploaded_file)
+                    if df is not None:
+                        all_data.append(df)
+                
+                if all_data:
+                    combined_df = pd.concat(all_data, ignore_index=True)
                     
-                    # Drop existing table - use raw_data for unmapped data
-                    conn.execute("DROP TABLE IF EXISTS raw_data")
-                    
-                    # Process files in chunks to avoid memory overflow
-                    total_rows = 0
-                    
-                    for idx, uploaded_file in enumerate(uploaded_files):
-                        # Read file in chunks
-                        file_extension = uploaded_file.name.split('.')[-1].lower()
-                        
-                        if file_extension == 'csv':
-                            # Stream CSV in chunks of 500 rows
-                            chunk_iter = pd.read_csv(uploaded_file, chunksize=500)
-                            
-                            for chunk_idx, chunk in enumerate(chunk_iter):
-                                if idx == 0 and chunk_idx == 0:
-                                    # First chunk creates table
-                                    conn.execute("CREATE TABLE raw_data AS SELECT * FROM chunk")
-                                else:
-                                    # Subsequent chunks append
-                                    conn.execute("INSERT INTO raw_data SELECT * FROM chunk")
-                                
-                                total_rows += len(chunk)
-                                st.text(f"Processing... {total_rows:,} rows loaded")
-                        
-                        elif file_extension == 'parquet':
-                            # Direct parquet load - no intermediate pandas
-                            uploaded_file.seek(0)
-                            temp_path = f"/tmp/upload_{idx}.parquet"
-                            with open(temp_path, 'wb') as f:
-                                f.write(uploaded_file.read())
-                            
-                            if idx == 0:
-                                conn.execute(f"CREATE TABLE raw_data AS SELECT * FROM read_parquet('{temp_path}')")
-                            else:
-                                conn.execute(f"INSERT INTO raw_data SELECT * FROM read_parquet('{temp_path}')")
-                            
-                            count = conn.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
-                            total_rows = count
-                            st.text(f"Processing... {total_rows:,} rows loaded")
-                        
-                        else:
-                            # Excel/TXT - load full file (usually smaller)
-                            df = load_file_to_dataframe(uploaded_file)
-                            if df is not None:
-                                if idx == 0 and total_rows == 0:
-                                    conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
-                                else:
-                                    conn.execute("INSERT INTO raw_data SELECT * FROM df")
-                                total_rows += len(df)
-                                del df  # Free memory immediately
-                                st.text(f"Processing... {total_rows:,} rows loaded")
-                    
-                    # Export to parquet bytes for download (stream from DuckDB, not pandas)
-                    parquet_path = "/tmp/transcripts_export.parquet"
-                    conn.execute(f"COPY raw_data TO '{parquet_path}' (FORMAT PARQUET)")
-                    
-                    with open(parquet_path, 'rb') as f:
-                        parquet_bytes = f.read()
-                    
+                    # Convert to parquet
+                    parquet_bytes = convert_to_parquet(combined_df, 'transcripts.parquet')
                     st.session_state.transcripts_parquet = parquet_bytes
+                    st.session_state.raw_df = combined_df
                     
-                    # Store ONLY metadata, not full dataframe
-                    st.session_state.total_rows = total_rows
+                    # Load into DuckDB
+                    conn = st.session_state.duckdb_conn
+                    conn.execute("DROP TABLE IF EXISTS transcripts")
+                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM combined_df")
+                    
+                    st.success(f"✅ Loaded {len(combined_df):,} rows | Size: {len(parquet_bytes) / 1024 / 1024:.2f} MB (Parquet)")
+                    
                     st.session_state.data_loaded = True
-                    
-                    # Get sample for column mapping (first 100 rows only)
-                    sample_df = conn.execute("SELECT * FROM raw_data LIMIT 100").fetchdf()
-                    st.session_state.sample_df = sample_df
-                    
-                    st.success(f"✅ Loaded {total_rows:,} rows | Size: {len(parquet_bytes) / 1024 / 1024:.2f} MB (Parquet)")
-                    st.info("💡 Data stored in DuckDB for efficient processing")
-                    
-                except Exception as e:
-                    st.error(f"Error loading files: {str(e)}")
-                    import traceback
-                    st.code(traceback.format_exc())
     
     if st.session_state.get('data_loaded'):
         st.markdown("---")
@@ -2673,11 +2564,7 @@ with tab1:
             </div>
         """, unsafe_allow_html=True)
         
-        df = st.session_state.get('sample_df')
-        if df is None:
-            st.error("Sample data not available. Please reload files.")
-            st.stop()
-        
+        df = st.session_state.raw_df
         available_columns = list(df.columns)
         
         col1, col2, col3 = st.columns(3)
@@ -2817,29 +2704,12 @@ with tab1:
                     
                     expanded_df = pd.DataFrame(expanded_rows)
                     
-                    # Save count before clearing
-                    total_message_turns = len(expanded_rows)
+                    # Store in session state first
+                    st.session_state.processed_df = expanded_df
                     
-                    # Clear rows from memory
-                    del expanded_rows
-                    
-                    # Load into DuckDB - DON'T store full DF in session
+                    # Reload into DuckDB using direct DataFrame reference
                     conn.execute("DROP TABLE IF EXISTS transcripts")
                     conn.execute("CREATE TABLE transcripts AS SELECT * FROM expanded_df")
-                    
-                    # Store only metadata
-                    st.session_state.transcripts_processed = True
-                    st.session_state.total_processed_rows = len(expanded_df)
-                    
-                    # Keep small sample for UI
-                    sample_df = expanded_df.head(100).copy()
-                    st.session_state.sample_df = sample_df
-                    
-                    # Save original call count
-                    original_call_count = len(df)
-                    
-                    # Free memory
-                    del expanded_df
                     
                     progress_bar.progress(0.8)
                     progress_text.text("📊 Running analytics...")
@@ -2915,7 +2785,7 @@ with tab1:
                     progress_text.empty()
                     progress_bar.empty()
                     
-                    st.success(f"✅ Pre-analysis complete! Processed {total_message_turns:,} message turns from {original_call_count:,} calls using {num_workers} CPU cores.")
+                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_workers} CPU cores.")
                     st.rerun()
         else:
             st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
@@ -3018,7 +2888,7 @@ with tab2:
                 if st.button("Generate Coaching Themes (LLM)", use_container_width=True, type="primary"):
                     with st.spinner("Generating coaching insights..."):
                         # Get agents data
-                        df = get_df_from_duckdb()
+                        df = st.session_state.processed_df
                         
                         # Calculate file hash for session management
                         file_hash = calculate_file_hash(df)
@@ -3050,7 +2920,7 @@ with tab2:
                         
                         if not new_agents:
                             st.success("All eligible agents already analyzed! Loading previous results...")
-                            st.session_state.coaching_insights = validate_coaching_insights(existing_session['insights'])
+                            st.session_state.coaching_insights = existing_session['insights']
                             st.session_state.processed = True
                             st.rerun()
                         
@@ -3129,9 +2999,6 @@ with tab2:
                             try:
                                 batch_insights = loop.run_until_complete(run_batch())
                                 
-                                # VALIDATE insights before merging - CRITICAL
-                                batch_insights = validate_coaching_insights(batch_insights)
-                                
                                 # Merge results
                                 all_insights.update(batch_insights)
                                 
@@ -3148,8 +3015,6 @@ with tab2:
                                 
                             except Exception as e:
                                 batch_status.error(f"Batch {batch_num} error: {str(e)}")
-                                import traceback
-                                st.expander("Error Details").code(traceback.format_exc())
                                 continue
                         
                         elapsed = time.time() - start_time
@@ -3170,41 +3035,23 @@ with tab2:
                             conn = st.session_state.duckdb_conn
                             cache_rows = []
                             for agent_name, agent_data in all_insights.items():
-                                if not isinstance(agent_data, dict):
-                                    continue
-                                
-                                themes = agent_data.get('coaching_themes', [])
-                                if not isinstance(themes, list):
-                                    continue
-                                
-                                for theme in themes:
-                                    # DEFENSIVE: Validate theme is dict
-                                    if not isinstance(theme, dict):
-                                        continue
-                                    
-                                    try:
-                                        cache_rows.append({
-                                            'agent': agent_name,
-                                            'theme': str(theme.get('theme', 'Unknown')),
-                                            'priority': str(theme.get('priority', 'low')),
-                                            'frequency': int(theme.get('frequency', 1)) if isinstance(theme.get('frequency'), (int, float)) else 1,
-                                            'examples': str(theme.get('examples', [])),
-                                            'recommendation': str(theme.get('recommendation', '')),
-                                            'processed_at': datetime.now().isoformat(),
-                                            'model_used': st.session_state.get('analysis_model', 'unknown')
-                                        })
-                                    except Exception as e:
-                                        # Skip malformed theme, don't crash
-                                        continue
+                                for theme in agent_data.get('coaching_themes', []):
+                                    cache_rows.append({
+                                        'agent': agent_name,
+                                        'theme': theme.get('theme', ''),
+                                        'priority': theme.get('priority', 'low'),
+                                        'frequency': theme.get('frequency', 1),
+                                        'examples': str(theme.get('examples', [])),
+                                        'recommendation': theme.get('recommendation', ''),
+                                        'processed_at': datetime.now().isoformat(),
+                                        'model_used': st.session_state.get('analysis_model', 'unknown')
+                                    })
                             
                             if cache_rows:
-                                try:
-                                    cache_df = pd.DataFrame(cache_rows)
-                                    conn.execute("DROP TABLE IF EXISTS coaching_cache")
-                                    conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
-                                    st.success(f"Cached {len(cache_rows)} coaching insights for future queries")
-                                except Exception as e:
-                                    st.warning(f"Cache storage warning: {str(e)}")
+                                cache_df = pd.DataFrame(cache_rows)
+                                conn.execute("DROP TABLE IF EXISTS coaching_cache")
+                                conn.execute("CREATE TABLE coaching_cache AS SELECT * FROM cache_df")
+                                st.success(f"Cached {len(cache_rows)} coaching insights for future queries")
                             
                             # Generate analytics context for chat
                             st.session_state.analytics_context = generate_analytics_context(all_insights, df)
@@ -3227,7 +3074,7 @@ with tab2:
             """, unsafe_allow_html=True)
             
             insights = st.session_state.coaching_insights
-            df = get_df_from_duckdb()
+            df = st.session_state.processed_df
             
             # Generate HTML report
             html_report = generate_html_report(insights, df)
@@ -3284,7 +3131,7 @@ with tab3:
             
             # Prepare context
             insights = st.session_state.coaching_insights
-            df = get_df_from_duckdb()
+            df = st.session_state.processed_df
             analytics_context = st.session_state.get('analytics_context', '')
             
             # Simple query routing
@@ -3423,40 +3270,15 @@ with tab4:
                 insights = st.session_state.coaching_insights
                 rows = []
                 for agent, data in insights.items():
-                    if not isinstance(data, dict):
-                        continue
-                    
-                    themes = data.get('coaching_themes', [])
-                    if not isinstance(themes, list):
-                        continue
-                    
-                    for theme in themes:
-                        # DEFENSIVE: Validate theme
-                        if not isinstance(theme, dict):
-                            continue
-                        
-                        try:
-                            examples = theme.get('examples', [])
-                            if isinstance(examples, list):
-                                examples_str = ' | '.join(str(e) for e in examples)
-                            else:
-                                examples_str = str(examples)
-                            
-                            rows.append({
-                                'agent': agent,
-                                'theme': str(theme.get('theme', 'Unknown')),
-                                'priority': str(theme.get('priority', 'low')),
-                                'frequency': int(theme.get('frequency', 0)) if isinstance(theme.get('frequency'), (int, float)) else 0,
-                                'examples': examples_str,
-                                'recommendation': str(theme.get('recommendation', ''))
-                            })
-                        except Exception:
-                            # Skip malformed theme
-                            continue
-                
-                if not rows:
-                    st.warning("No valid coaching data to export")
-                    st.stop()
+                    for theme in data.get('coaching_themes', []):
+                        rows.append({
+                            'agent': agent,
+                            'theme': theme.get('theme', ''),
+                            'priority': theme.get('priority', ''),
+                            'frequency': theme.get('frequency', 0),
+                            'examples': ' | '.join(theme.get('examples', [])),
+                            'recommendation': theme.get('recommendation', '')
+                        })
                 
                 export_df = pd.DataFrame(rows)
                 csv = export_df.to_csv(index=False)
@@ -3516,7 +3338,7 @@ with tab4:
         with col4:
             if st.button("📽️ Export PowerPoint", use_container_width=True):
                 with st.spinner("Generating PowerPoint..."):
-                    ppt_data = generate_powerpoint(st.session_state.coaching_insights, get_df_from_duckdb())
+                    ppt_data = generate_powerpoint(st.session_state.coaching_insights, st.session_state.processed_df)
                     st.download_button(
                         "Download PowerPoint",
                         data=ppt_data,
@@ -3543,7 +3365,7 @@ with tab4:
             if st.button("💾 Save Session", use_container_width=True):
                 # Save all session data to parquet
                 session_data = {
-                    'transcripts': get_df_from_duckdb(),
+                    'transcripts': st.session_state.processed_df,
                     'insights': pd.DataFrame([
                         {'agent': agent, 'insights_json': json.dumps(data)}
                         for agent, data in st.session_state.coaching_insights.items()
@@ -3551,7 +3373,7 @@ with tab4:
                     'metadata': pd.DataFrame([{
                         'processed_at': datetime.now().isoformat(),
                         'model_used': analysis_model,
-                        'total_calls': len(get_df_from_duckdb()['call_id'].unique()),
+                        'total_calls': len(st.session_state.processed_df['call_id'].unique()),
                         'total_agents': len(st.session_state.coaching_insights)
                     }])
                 }
@@ -3606,5 +3428,5 @@ with tab4:
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: white; opacity: 0.7; padding: 20px;'>", unsafe_allow_html=True)
-st.markdown("QA Coaching Intelligence Platform | Powered by AI Analytics", unsafe_allow_html=True)
+st.markdown("QA Coaching Intelligence Platform | Developed by CE INNOVATIONS LAB 2025", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
