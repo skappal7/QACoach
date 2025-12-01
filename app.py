@@ -2817,6 +2817,9 @@ with tab1:
                     
                     expanded_df = pd.DataFrame(expanded_rows)
                     
+                    # Save count before clearing
+                    total_message_turns = len(expanded_rows)
+                    
                     # Clear rows from memory
                     del expanded_rows
                     
@@ -2831,6 +2834,9 @@ with tab1:
                     # Keep small sample for UI
                     sample_df = expanded_df.head(100).copy()
                     st.session_state.sample_df = sample_df
+                    
+                    # Save original call count
+                    original_call_count = len(df)
                     
                     # Free memory
                     del expanded_df
@@ -2909,7 +2915,7 @@ with tab1:
                     progress_text.empty()
                     progress_bar.empty()
                     
-                    st.success(f"✅ Pre-analysis complete! Processed {len(expanded_rows):,} message turns from {len(df):,} calls using {num_workers} CPU cores.")
+                    st.success(f"✅ Pre-analysis complete! Processed {total_message_turns:,} message turns from {original_call_count:,} calls using {num_workers} CPU cores.")
                     st.rerun()
         else:
             st.warning("⚠️ Please map all required columns (Call ID, Agent, Transcript)")
