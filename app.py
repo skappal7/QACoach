@@ -2471,7 +2471,7 @@ with st.sidebar:
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Resume", use_container_width=True):
-                    st.session_state.coaching_insights = existing_session['insights']
+                    st.session_state.coaching_insights = validate_coaching_insights(existing_session['insights'])
                     st.session_state.processed = True
                     st.session_state.analytics_context = generate_analytics_context(
                         existing_session['insights'],
@@ -2582,8 +2582,8 @@ with tab1:
                     # PARQUET-FIRST: Stream directly to disk, no pandas intermediate
                     conn = st.session_state.duckdb_conn
                     
-                    # Drop existing table
-                    conn.execute("DROP TABLE IF EXISTS transcripts")
+                    # Drop existing table - use raw_data for unmapped data
+                    conn.execute("DROP TABLE IF EXISTS raw_data")
                     
                     # Process files in chunks to avoid memory overflow
                     total_rows = 0
@@ -2599,10 +2599,10 @@ with tab1:
                             for chunk_idx, chunk in enumerate(chunk_iter):
                                 if idx == 0 and chunk_idx == 0:
                                     # First chunk creates table
-                                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM chunk")
+                                    conn.execute("CREATE TABLE raw_data AS SELECT * FROM chunk")
                                 else:
                                     # Subsequent chunks append
-                                    conn.execute("INSERT INTO transcripts SELECT * FROM chunk")
+                                    conn.execute("INSERT INTO raw_data SELECT * FROM chunk")
                                 
                                 total_rows += len(chunk)
                                 st.text(f"Processing... {total_rows:,} rows loaded")
@@ -2615,11 +2615,11 @@ with tab1:
                                 f.write(uploaded_file.read())
                             
                             if idx == 0:
-                                conn.execute(f"CREATE TABLE transcripts AS SELECT * FROM read_parquet('{temp_path}')")
+                                conn.execute(f"CREATE TABLE raw_data AS SELECT * FROM read_parquet('{temp_path}')")
                             else:
-                                conn.execute(f"INSERT INTO transcripts SELECT * FROM read_parquet('{temp_path}')")
+                                conn.execute(f"INSERT INTO raw_data SELECT * FROM read_parquet('{temp_path}')")
                             
-                            count = conn.execute("SELECT COUNT(*) FROM transcripts").fetchone()[0]
+                            count = conn.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
                             total_rows = count
                             st.text(f"Processing... {total_rows:,} rows loaded")
                         
@@ -2628,16 +2628,16 @@ with tab1:
                             df = load_file_to_dataframe(uploaded_file)
                             if df is not None:
                                 if idx == 0 and total_rows == 0:
-                                    conn.execute("CREATE TABLE transcripts AS SELECT * FROM df")
+                                    conn.execute("CREATE TABLE raw_data AS SELECT * FROM df")
                                 else:
-                                    conn.execute("INSERT INTO transcripts SELECT * FROM df")
+                                    conn.execute("INSERT INTO raw_data SELECT * FROM df")
                                 total_rows += len(df)
                                 del df  # Free memory immediately
                                 st.text(f"Processing... {total_rows:,} rows loaded")
                     
                     # Export to parquet bytes for download (stream from DuckDB, not pandas)
                     parquet_path = "/tmp/transcripts_export.parquet"
-                    conn.execute(f"COPY transcripts TO '{parquet_path}' (FORMAT PARQUET)")
+                    conn.execute(f"COPY raw_data TO '{parquet_path}' (FORMAT PARQUET)")
                     
                     with open(parquet_path, 'rb') as f:
                         parquet_bytes = f.read()
@@ -2649,7 +2649,7 @@ with tab1:
                     st.session_state.data_loaded = True
                     
                     # Get sample for column mapping (first 100 rows only)
-                    sample_df = conn.execute("SELECT * FROM transcripts LIMIT 100").fetchdf()
+                    sample_df = conn.execute("SELECT * FROM raw_data LIMIT 100").fetchdf()
                     st.session_state.sample_df = sample_df
                     
                     st.success(f"✅ Loaded {total_rows:,} rows | Size: {len(parquet_bytes) / 1024 / 1024:.2f} MB (Parquet)")
@@ -3050,7 +3050,7 @@ with tab2:
                         
                         if not new_agents:
                             st.success("All eligible agents already analyzed! Loading previous results...")
-                            st.session_state.coaching_insights = existing_session['insights']
+                            st.session_state.coaching_insights = validate_coaching_insights(existing_session['insights'])
                             st.session_state.processed = True
                             st.rerun()
                         
